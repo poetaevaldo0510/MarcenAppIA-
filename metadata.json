@@ -1,8 +1,9 @@
 {
+  "name": "Cockpit Yara - Marcenaria Digital",
+  "description": "Inteligência Evaldo.OS para orquestração de marcenaria industrial.",
   "requestFramePermissions": [
+    "microphone",
     "camera",
-    "microphone"
-  ],
-  "name": "MarcenApp - IA Marceneira",
-  "description": ""
+    "geolocation"
+  ]
 }
