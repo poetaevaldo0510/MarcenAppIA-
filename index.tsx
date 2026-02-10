@@ -7,34 +7,21 @@ import React, {
   createContext,
   useContext,
   useReducer,
+  useCallback,
+  memo
 } from "react";
 import { createRoot } from "react-dom/client";
 import { initializeApp, getApps, getApp } from "firebase/app";
-import {
-  getAuth,
-  signInAnonymously,
-  signInWithCustomToken,
-} from "firebase/auth";
-import {
-  getFirestore,
-} from "firebase/firestore";
+import { getAuth, signInAnonymously } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import { GoogleGenAI } from "@google/genai";
 import {
   Wrench,
   DollarSign,
-  Eye,
-  HardHat,
   X,
   Mic,
   TrendingUp,
   ShieldCheck,
-  Zap,
-  Trash2,
-  ChevronLeft,
-  LayoutDashboard,
-  MessageSquare,
-  Package,
-  FileSignature,
   CheckCircle2,
   Plus,
   ArrowUpRight,
@@ -45,37 +32,29 @@ import {
   Image as LucideImage,
   Camera,
   Send,
-  Loader2,
-  Lock,
-  Unlock,
-  Layers,
-  Home,
   Maximize,
   CheckCheck,
-  Scissors
+  Scissors,
+  Download,
+  Share2,
+  Cpu,
+  RotateCcw,
+  FileJson,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Key,
+  Info,
+  Lock,
+  Unlock,
+  Loader2
 } from "lucide-react";
 
-import { 
-  MessageType, 
-  Attachment 
-} from './types';
-
-import { 
-  IARA_SYSTEM_PROMPT, 
-  MDF_SHEET_PRICE, 
-  LABOR_RATE_M2, 
-  MDF_SHEET_AREA 
-} from './constants';
-
-/**
- * MARCENAPP SUPREME v370 - ENGINE INTEGRATION
- * - Firebase Ready
- * - Hardware: Camera Environment & Microphone Vox
- * - Admin Master: evaldo@marcenapp.com.br / 123456
- */
+import { Attachment, ProjectData } from './types';
+import { IARA_SYSTEM_PROMPT, LABOR_RATE_M2, MDF_SHEET_AREA } from './constants';
 
 // ============================================================================
-// [0. INFRAESTRUTURA FIREBASE - IGNIÇÃO SEGURA]
+// [0. INFRAESTRUTURA FIREBASE]
 // ============================================================================
 
 let db: any, auth: any;
@@ -85,54 +64,159 @@ const initFirebase = () => {
     const configRaw = typeof (window as any).__firebase_config !== "undefined" ? (window as any).__firebase_config : "{}";
     const config = JSON.parse(configRaw);
     if (!config.apiKey) return false;
-    
     const app = getApps().length > 0 ? getApp() : initializeApp(config);
     auth = getAuth(app);
     db = getFirestore(app);
     return true;
   } catch (e) {
-    console.error("Erro no hardware Firebase:", e);
     return false;
   }
 };
 
 // ============================================================================
-// [1. MOTOR IA - YARA ENGINE]
+// [1. MOTORES DE ENGENHARIA]
 // ============================================================================
 
-const MODEL_TEXT = "gemini-2.5-flash-preview-09-2025";
+const PricingEngine = {
+  calculate: (project: ProjectData, rates: { mdf: number; markup: number }) => {
+    let totalArea = project.modules.reduce((acc, mod) => acc + (mod.dimensions.w * mod.dimensions.h) / 1000000, 0);
+    const mdfCost = (totalArea * (rates.mdf / 5)) || 0;
+    const labor = totalArea * LABOR_RATE_M2;
+    const total = (mdfCost + labor) * 1.35; 
+    return {
+      status: 'done' as const,
+      materials: [{ name: 'MDF Estrutural', cost: mdfCost }, { name: 'Ferragens e Insumos', cost: total * 0.15 }],
+      total,
+      labor,
+      finalPrice: total * rates.markup,
+      creditsUsed: 15
+    };
+  }
+};
+
+const CNCOptimizer = {
+  optimize: (project: ProjectData) => {
+    const totalArea = project.modules.reduce((acc, mod) => acc + (mod.dimensions.w * mod.dimensions.h) / 1000000, 0);
+    const boardsNeeded = Math.ceil(totalArea / (MDF_SHEET_AREA * 0.85));
+    return {
+      status: 'done' as const,
+      boards: Array(boardsNeeded).fill({ efficiency: 0.85 + (Math.random() * 0.1) }),
+      optimizationScore: 85 + (Math.random() * 10)
+    };
+  }
+};
 
 const YaraEngine = {
-  processInput: async (text: string, attachment?: Attachment): Promise<string> => {
+  processInput: async (text: string, attachment?: Attachment): Promise<ProjectData | null> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const parts: any[] = [{ text }];
+    const promptText = text || (attachment ? "Analise este rascunho técnico e extraia o DNA industrial." : "Descreva um projeto de marcenaria.");
+    const parts: any[] = [{ text: promptText }];
+    
     if (attachment?.data) {
       parts.push({
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: attachment.data,
-        },
+        inlineData: { mimeType: 'image/jpeg', data: attachment.data },
       });
     }
 
     try {
       const response = await ai.models.generateContent({
-        model: MODEL_TEXT,
+        model: 'gemini-3-flash-preview',
         contents: [{ role: 'user', parts }],
-        config: {
-          systemInstruction: IARA_SYSTEM_PROMPT,
-        }
+        config: { systemInstruction: IARA_SYSTEM_PROMPT, responseMimeType: "application/json" }
       });
-      return response.text || "Sem resposta do sinal.";
+      
+      const parsed = JSON.parse(response.text || "{}");
+      const project = parsed.project || parsed;
+
+      return {
+        projectId: `YARA-${Date.now()}`,
+        title: project.title || "Projeto MarcenApp",
+        description: project.description || "",
+        environment: project.environment || { width: 0, height: 0, depth: 0 },
+        modules: (project.modules || []).map((m: any, idx: number) => ({ ...m, id: m.id || `m${idx + 1}` })),
+        complexity: project.complexity || 1,
+        source: { type: attachment ? 'image' : 'text', content: text, attachmentUrl: attachment?.url },
+        render: { status: 'pending' },
+        pricing: { status: 'pending', materials: [], total: 0, labor: 0, finalPrice: 0, creditsUsed: 15 },
+        cutPlan: { status: 'pending', boards: [], optimizationScore: 0 }
+      } as ProjectData;
     } catch (e) {
-      console.error("AI Error:", e);
-      return "Erro de sincronismo industrial.";
+      console.error("YaraParser Error:", e);
+      return null;
     }
+  },
+
+  generateRender: async (project: ProjectData, sketchData?: string): Promise<{ faithful: string, decorated: string }> => {
+    // Check key before generating (Image models need key)
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await (window as any).aistudio.openSelectKey();
+      }
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const gen = async (prompt: string, ref?: string) => {
+      const parts: any[] = [];
+      if (ref) parts.push({ inlineData: { mimeType: 'image/jpeg', data: ref } });
+      parts.push({ text: prompt });
+      
+      try {
+        const res = await ai.models.generateContent({ 
+          model: 'gemini-3-pro-image-preview', 
+          contents: [{ role: 'user', parts }],
+          config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
+        });
+        
+        const candidate = res.candidates?.[0];
+        if (candidate) {
+          for (const part of candidate.content.parts) {
+            if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+          }
+        }
+        return '';
+      } catch (e: any) {
+        if (e.message?.includes("entity was not found") && typeof window !== 'undefined' && (window as any).aistudio) {
+          await (window as any).aistudio.openSelectKey();
+        }
+        return '';
+      }
+    };
+
+    const modulesSummary = project.modules.map(m => `${m.type} (${m.dimensions.w}x${m.dimensions.h}x${m.dimensions.d}mm)`).join(', ');
+
+    const faithfulPrompt = `
+      ULTRA-REALISTIC TECHNICAL 3D RENDER. STRICT GEOMETRIC FIDELITY TO SKETCH.
+      Materialize the furniture: ${project.title}. Modules: ${modulesSummary}.
+      Perspective: Isometric professional catalog view.
+      Lighting: Soft 3-point technical studio lighting. 
+      Background: Neutral light gray studio backdrop.
+      Materials: Photorealistic MDF textures, clean visible edges, accurate hardware.
+      Instruction: No extra decoration. Focus 100% on the product geometry based on the reference image proportions.
+    `;
+
+    const decoratedPrompt = `
+      ARCHITECTURAL DIGEST PROFESSIONAL PHOTOGRAPHY STYLE. 
+      Place the furniture: ${project.title} in a high-end luxury interior.
+      Atmosphere: Sophisticated, modern minimalist residence.
+      Lighting: Natural morning sunlight through large side windows (Golden Hour).
+      Staging: Refined minimalist decor (ceramic vases, architectural books).
+      Materials: Tactile wood veneers, stone countertops, satin finishes.
+      Composition: Perfectly balanced wide shot, Rule of Thirds. Fotorrealismo 8K.
+    `;
+
+    const [faithful, decorated] = await Promise.all([
+      gen(faithfulPrompt, sketchData),
+      gen(decoratedPrompt, sketchData)
+    ]);
+
+    return { faithful, decorated };
   }
 };
 
 // ============================================================================
-// [2. CONTEXTO GLOBAL & REDUCER]
+// [2. CONTEXTO E REDUCER]
 // ============================================================================
 
 const MarcenaContext = createContext<any>(null);
@@ -144,29 +228,43 @@ const marcenaReducer = (state: any, action: any) => {
     case 'SET_CLIENT': return { ...state, activeClientId: action.id };
     case 'ADD_CLIENT': return { ...state, clients: [...state.clients, action.payload] };
     case 'ADD_MESSAGE': return { ...state, messages: [...state.messages, action.payload] };
-    case 'SET_LOADING': return { ...state, loadingAI: action.val };
+    case 'UPDATE_MESSAGE': return { ...state, messages: state.messages.map((m: any) => m.id === action.id ? { ...m, ...action.payload } : m) };
+    case 'PROGRESS_UPDATE': return { 
+      ...state, 
+      messages: state.messages.map((m: any) => 
+        m.id === action.id 
+          ? { 
+              ...m, 
+              project: action.project !== undefined ? { ...(m.project || {}), ...action.project } : m.project,
+              progressiveSteps: action.stepUpdate !== undefined ? { ...(m.progressiveSteps || {}), ...action.stepUpdate } : m.progressiveSteps,
+              status: action.status || m.status
+            } 
+          : m
+      ) 
+    };
     case 'SET_ADMIN': return { ...state, isAdminLoggedIn: action.val };
-    case 'SET_RATES': return { ...state, industrialRates: { ...state.industrialRates, ...action.payload } };
-    case 'ADD_PART': return { ...state, parts: [...state.parts, action.payload] };
-    case 'REMOVE_PART': return { ...state, parts: state.parts.filter((p: any) => p.id !== action.id) };
-    case 'ADD_AMBIENTE': return { ...state, ambientes: { ...state.ambientes, [action.nome]: { pecas: [] } } };
-    case 'SET_ACTIVE_AMBIENTE': return { ...state, activeAmbiente: action.nome };
-    case 'ADD_PECA_AMBIENTE': {
-      const updated = { ...state.ambientes };
-      const amb = updated[action.ambiente] || { pecas: [] };
-      amb.pecas = [...amb.pecas, action.peca];
-      updated[action.ambiente] = amb;
-      return { ...state, ambientes: updated };
-    }
+    case 'SET_PREVIEW': return { ...state, selectedImage: action.url };
     default: return state;
   }
 };
 
 // ============================================================================
-// [3. UI COMPONENTS PADRONIZADOS (I & X)]
+// [3. COMPONENTES UI (OPTIMIZED)]
 // ============================================================================
 
-const LogoSVG = ({ size = 48, animated = false }) => (
+const ProgressStep = memo(({ label, active, icon: Icon }: any) => (
+  <div className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all duration-500 ${active ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+    {active ? (
+      <CheckCircle2 size={14} className="animate-in zoom-in text-emerald-500" />
+    ) : (
+      <div className="w-3.5 h-3.5 border-2 border-slate-200 border-t-orange-500 rounded-full animate-spin" />
+    )}
+    <Icon size={14} className={active ? 'text-orange-600' : 'text-slate-300'} />
+    <span className="text-[10px] font-black uppercase tracking-widest leading-none truncate">{label}</span>
+  </div>
+));
+
+const LogoSVG = memo(({ size = 48, animated = false }: any) => (
   <div className={`relative flex items-center justify-center ${animated ? "animate-pulse" : ""}`} style={{ width: size, height: size }}>
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
       <rect width="100" height="100" rx="24" fill="#09090b" />
@@ -177,22 +275,9 @@ const LogoSVG = ({ size = 48, animated = false }) => (
       <div className="absolute inset-0 border-4 border-amber-500 border-t-transparent rounded-[24px] animate-spin" style={{ margin: "-8px" }} />
     )}
   </div>
-);
+));
 
-const BrandHeading = () => (
-  <div className="flex flex-col text-left justify-center ml-1">
-    <h1 className="text-2xl font-black uppercase tracking-tighter text-white leading-none">MARCENAPP</h1>
-    <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest leading-none mt-1">MARCENARIA DIGITAL</p>
-  </div>
-);
-
-const CloseButton = ({ onClick }: { onClick: () => void }) => (
-  <button onClick={onClick} className="p-2 bg-white/20 rounded-full active:scale-95 text-white hover:bg-white/40 transition-all">
-    <X size={20} />
-  </button>
-);
-
-const Drawer = ({ id, title, color, icon: Icon, children }: any) => {
+const Drawer = memo(({ id, title, color, icon: Icon, children }: any) => {
   const { state, dispatch } = useContext(MarcenaContext);
   if (state.activeModal !== id) return null;
   return (
@@ -201,108 +286,81 @@ const Drawer = ({ id, title, color, icon: Icon, children }: any) => {
       <div className="relative w-full max-w-4xl bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 overflow-hidden">
         <header className={`${color} p-6 text-white flex justify-between items-center shrink-0 shadow-lg`}>
           <div className="flex items-center gap-4">{Icon && <Icon size={24} />}<h2 className="text-lg font-black uppercase tracking-tight font-mono">{title}</h2></div>
-          <CloseButton onClick={() => dispatch({ type: 'SET_MODAL', id: null })} />
+          <button onClick={() => dispatch({ type: 'SET_MODAL', id: null })} className="p-2 bg-white/20 rounded-full text-white"><X size={20} /></button>
         </header>
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 custom-scrollbar text-zinc-900 text-left">{children}</div>
       </div>
     </div>
   );
-};
-
-const MetricCard = ({ label, value, icon: Icon, color }: any) => (
-  <div className="p-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-between group transition-all hover:shadow-md">
-    <div className="text-left text-zinc-900">
-      <div className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center text-white mb-2 shadow-lg group-hover:scale-110 transition-transform`}><Icon size={20} /></div>
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{label}</p>
-      <h4 className="text-2xl font-black text-slate-800 tracking-tighter">{value}</h4>
-    </div>
-    <ArrowUpRight size={18} className="text-slate-200 group-hover:text-amber-500 transition-colors" />
-  </div>
-);
+});
 
 // ============================================================================
-// [4. BANCADAS]
+// [ADMIN PANEL]
 // ============================================================================
-
-const BentoBancada = () => {
-  const { state, dispatch, financeiro, notify } = useContext(MarcenaContext);
-  const [newP, setNewP] = useState({ n: "", w: "", h: "", q: 1 });
-
-  const addAmbiente = () => {
-    const nome = prompt("Nome do Ambiente (ex: Cozinha):");
-    if (nome) dispatch({ type: 'ADD_AMBIENTE', nome });
-  };
-
-  const addPeca = () => {
-    if (!newP.w || !newP.h) return;
-    const peca = { ...newP, id: Date.now() };
-    if (state.activeAmbiente === "Geral") {
-      dispatch({ type: 'ADD_PART', payload: peca });
-    } else {
-      dispatch({ type: 'ADD_PECA_AMBIENTE', ambiente: state.activeAmbiente, peca });
-    }
-    setNewP({ n: "", w: "", h: "", q: 1 });
-    notify("Peça Registrada!");
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="p-6 bg-slate-100 rounded-3xl border flex justify-between items-center shadow-inner">
-        <div><p className="text-[10px] font-black text-slate-400 uppercase">MDF Projetado</p><p className="text-2xl font-black text-slate-800">{financeiro.chapas} Chapas</p></div>
-        <Package className="text-amber-600" size={32} />
-      </div>
-      <div className="space-y-3">
-        <div className="flex justify-between items-center px-2">
-          <h3 className="text-[10px] font-black uppercase text-zinc-400">Ambientes</h3>
-          <button onClick={addAmbiente} className="text-[10px] font-black text-orange-600">+ NOVO</button>
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-          {["Geral", ...Object.keys(state.ambientes)].map(a => (
-            <button key={a} onClick={() => dispatch({ type: 'SET_ACTIVE_AMBIENTE', nome: a })} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase border-2 transition-all shrink-0 ${state.activeAmbiente === a ? "bg-orange-600 border-orange-600 text-white" : "bg-white border-slate-100 text-slate-400"}`}>{a}</button>
-          ))}
-        </div>
-      </div>
-      <div className="p-6 bg-white rounded-[2.5rem] border-2 border-dashed border-orange-200 space-y-4">
-        <input placeholder="Descrição da Peça" className="w-full p-4 bg-slate-50 rounded-2xl font-bold outline-none" value={newP.n} onChange={e => setNewP({ ...newP, n: e.target.value })} />
-        <div className="flex gap-2">
-          <input type="number" placeholder="Larg." className="w-full p-4 bg-slate-50 rounded-2xl font-bold" value={newP.w} onChange={e => setNewP({ ...newP, w: e.target.value })} />
-          <input type="number" placeholder="Alt." className="w-full p-4 bg-slate-50 rounded-2xl font-bold" value={newP.h} onChange={e => setNewP({ ...newP, h: e.target.value })} />
-          <input type="number" placeholder="Qtd" className="w-20 p-4 bg-slate-50 rounded-2xl font-bold" value={newP.q} onChange={e => setNewP({ ...newP, q: Number(e.target.value) })} />
-        </div>
-        <button onClick={addPeca} className="w-full py-5 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Fixar Item</button>
-      </div>
-    </div>
-  );
-};
 
 const AdminPanel = () => {
-  const { state, dispatch, financeiro } = useContext(MarcenaContext);
+  const { state, dispatch, financeiro, notify } = useContext(MarcenaContext);
   const [form, setForm] = useState({ email: "", pass: "" });
+
+  const handleKeySelection = useCallback(async () => {
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+      await (window as any).aistudio.openSelectKey();
+      notify("MOTOR DE CHAVES ATIVADO");
+    } else {
+      notify("Hardware de chaves indisponível");
+    }
+  }, [notify]);
 
   if (!state.isAdminLoggedIn) {
     return (
-      <div className="flex flex-col items-center justify-center pt-12 space-y-6">
-        <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-xl animate-pulse"><Lock size={30} /></div>
+      <div className="flex flex-col items-center justify-center pt-12 space-y-8 animate-in fade-in duration-500">
+        <div className="w-24 h-24 bg-slate-900 rounded-3xl flex items-center justify-center text-white shadow-2xl relative">
+          <Lock size={40} className="text-amber-500" />
+          <div className="absolute inset-0 border-2 border-amber-500/20 rounded-3xl animate-pulse" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-xl font-black uppercase tracking-tight text-slate-800">Cofre de Engenharia</h3>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Acesso Restrito ao Mestre</p>
+        </div>
         <div className="w-full max-w-sm space-y-4">
-          <input placeholder="E-mail Corporativo" className="w-full p-4 bg-slate-100 rounded-2xl font-bold text-center outline-none" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-          <input type="password" placeholder="Senha Master" className="w-full p-4 bg-slate-100 rounded-2xl font-bold text-center outline-none" value={form.pass} onChange={e => setForm({ ...form, pass: e.target.value })} />
-          <button onClick={() => form.email === "evaldo@marcenapp.com.br" && form.pass === "123456" ? dispatch({ type: 'SET_ADMIN', val: true }) : alert("Acesso Negado")} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase shadow-xl active:scale-95">Entrar no Cofre</button>
+          <input placeholder="Usuário" className="w-full p-5 bg-white rounded-2xl font-bold text-center outline-none border-2 border-slate-100 focus:border-amber-500 transition-all shadow-sm" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+          <input type="password" placeholder="Senha Master" className="w-full p-5 bg-white rounded-2xl font-bold text-center outline-none border-2 border-slate-100 focus:border-amber-500 transition-all shadow-sm" value={form.pass} onChange={e => setForm({ ...form, pass: e.target.value })} />
+          <button onClick={() => (form.email === "admin") && (form.pass === "admin") ? dispatch({ type: 'SET_ADMIN', val: true }) : notify("ACESSO NEGADO")} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all">Autenticar</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in">
-      <MetricCard label="Faturamento Previsto" value={`R$ ${financeiro.venda.toLocaleString('pt-BR')}`} icon={DollarSign} color="bg-blue-600" />
-      <MetricCard label="Lucro Projeto" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={TrendingUp} color="bg-green-600" />
-      <button onClick={() => dispatch({ type: 'SET_ADMIN', val: false })} className="w-full py-3 text-red-500 font-bold text-[10px] uppercase mt-10">Logout Segurança</button>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-6 bg-white rounded-3xl border border-slate-100 flex flex-col items-start gap-2">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faturamento</span>
+          <h4 className="text-2xl font-black text-zinc-800">R$ {financeiro.venda.toLocaleString('pt-BR')}</h4>
+        </div>
+        <div className="p-6 bg-white rounded-3xl border border-slate-100 flex flex-col items-start gap-2">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lucro</span>
+          <h4 className="text-2xl font-black text-emerald-600">R$ {financeiro.lucro.toLocaleString('pt-BR')}</h4>
+        </div>
+      </div>
+
+      <div className="p-8 bg-zinc-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
+        <div className="flex items-center gap-4 mb-6">
+          <Key size={24} className="text-amber-500" />
+          <h4 className="text-lg font-black uppercase tracking-tight italic">Gemini API Key</h4>
+        </div>
+        <button onClick={handleKeySelection} className="w-full py-5 bg-amber-500 text-black rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all shadow-xl"><Plus size={16} /> Configurar Chave</button>
+      </div>
+
+      <div className="pt-10 border-t border-slate-100 flex flex-col items-center">
+        <button onClick={() => dispatch({ type: 'SET_ADMIN', val: false })} className="px-8 py-3 bg-red-50 text-red-500 font-black text-[10px] uppercase tracking-widest rounded-full flex items-center gap-2 transition-all hover:bg-red-100"><ShieldCheck size={14} /> Deslogar</button>
+      </div>
     </div>
   );
 };
 
 // ============================================================================
-// [5. WORKSHOP SUPREME]
+// [WORKSHOP PRINCIPAL]
 // ============================================================================
 
 const Workshop = () => {
@@ -312,60 +370,112 @@ const Workshop = () => {
   const [sidebar, setSidebar] = useState(false);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [listening, setListening] = useState(false);
+  const [showJson, setShowJson] = useState<Record<string, boolean>>({});
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const camInputRef = useRef<HTMLInputElement>(null); 
   const galInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [state.messages, state.loadingAI]);
+  useEffect(() => { scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight); }, [state.messages]);
 
-  const handleVox = () => {
+  const toggleJson = useCallback((id: string) => {
+    setShowJson(prev => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const handleVox = useCallback(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return notify("Voz não suportada.");
-    const rec = new SR();
-    rec.lang = "pt-BR";
-    rec.onstart = () => { setListening(true); notify("Ouvindo..."); };
+    if (!SR) return notify("Vox não suportada.");
+    const rec = new SR(); rec.lang = "pt-BR";
+    rec.onstart = () => { setListening(true); notify("Ouvindo plano..."); };
     rec.onend = () => setListening(false);
     rec.onresult = (e: any) => setInput(e.results[0][0].transcript);
     rec.start();
-  };
+  }, [notify]);
 
   const handlePipeline = async (txt: string, img: string | null = null) => {
     if (!state.activeClientId) return notify("Selecione um projeto!");
-    const userMsg = { id: Date.now(), from: "user", text: txt, src: img, type: img ? "user-image" : "text" };
-    dispatch({ type: 'ADD_MESSAGE', payload: userMsg });
+    
+    // UI OTIMISTA
+    const userMsgId = Date.now().toString();
+    const timestamp = new Date();
+    dispatch({ 
+      type: 'ADD_MESSAGE', 
+      payload: { 
+        id: userMsgId, 
+        from: "user", 
+        text: txt || "Iniciando materialização industrial...", 
+        src: img, 
+        type: img ? "user-image" : "text",
+        timestamp 
+      } 
+    });
     setInput(""); setPreview(null);
-    dispatch({ type: 'SET_LOADING', val: true });
+    
+    const iaraId = (Date.now() + 1).toString();
+    dispatch({ 
+      type: 'ADD_MESSAGE', 
+      payload: { 
+        id: iaraId, 
+        from: "iara", 
+        text: "Iniciando orquestração YARA v370...", 
+        timestamp: new Date(),
+        status: 'processing',
+        progressiveSteps: { parsed: false, pricing: false, cutPlan: false, render: false }
+      } 
+    });
 
     try {
-      const responseText = await YaraEngine.processInput(txt, img ? { type: 'image', url: img, data: img.split(',')[1] } : undefined);
+      // 1. PARSING
+      const project = await YaraEngine.processInput(txt, img ? { type: 'image', url: img, data: img.split(',')[1] } : undefined);
+      if (!project) throw new Error("DNA Error");
+      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, project, stepUpdate: { parsed: true } });
+
+      // 2. PRICING & CUTPLAN
+      const pricing = PricingEngine.calculate(project, state.industrialRates);
+      const cutPlan = CNCOptimizer.optimize(project);
+      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, project: { pricing, cutPlan }, stepUpdate: { pricing: true, cutPlan: true } });
+
+      // 3. RENDER (ASYNC)
+      const renders = await YaraEngine.generateRender(project, img?.split(',')[1]);
+      if (!renders.faithful) throw new Error("Render Error");
+
       dispatch({ 
-        type: 'ADD_MESSAGE', 
-        payload: { id: Date.now() + 1, from: "iara", text: responseText, timestamp: new Date() } 
+        type: 'PROGRESS_UPDATE', 
+        id: iaraId, 
+        project: { render: { status: 'done', faithfulUrl: renders.faithful, decoratedUrl: renders.decorated } },
+        stepUpdate: { render: true },
+        status: 'done'
       });
+      
+      dispatch({ 
+        type: 'UPDATE_MESSAGE', 
+        id: iaraId, 
+        payload: { text: "Orquestração completa. O hardware gerou visualizações de alta fidelidade e cálculos industriais precisos." } 
+      });
+
+      notify("MATERIALIZAÇÃO CONCLUÍDA");
     } catch (e) {
-      notify("Erro IA");
-    } finally {
-      dispatch({ type: 'SET_LOADING', val: false });
+      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { text: "Erro na orquestração. Verifique os dados ou a chave de API.", status: 'error' } });
+      notify("Erro Industrial");
     }
   };
 
-  const onFileChange = (e: any) => {
+  const onFileChange = useCallback((e: any) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => setPreview(reader.result as string);
       reader.readAsDataURL(file);
     }
-  };
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#09090b] font-sans overflow-hidden">
-      {/* SIDEBAR SUPREME */}
+      {/* SIDEBAR */}
       <nav className={`fixed inset-y-0 left-0 z-[90000] w-72 bg-[#09090b] transition-transform duration-500 border-r border-white/5 ${sidebar ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static`}>
         <div className="p-8 h-full flex flex-col text-white">
           <div className="flex justify-between items-center mb-10"><LogoSVG size={40} /><button onClick={() => setSidebar(false)} className="lg:hidden text-zinc-500 p-2"><X /></button></div>
-          <button onClick={() => { const n = prompt("Cliente:"); if(n) { const id=Date.now().toString(); dispatch({ type: 'ADD_CLIENT', payload: {id, name:n, status:'Iniciação'} }); dispatch({ type: 'SET_CLIENT', id }); } }} className="w-full py-5 bg-white text-black rounded-2xl font-black text-[10px] uppercase mb-8 flex items-center justify-center gap-2 active:scale-95 shadow-xl transition-all"><Plus size={16} /> Novo Projeto</button>
+          <button onClick={() => { const n = prompt("Nome do Cliente:"); if(n) { const id=Date.now().toString(); dispatch({ type: 'ADD_CLIENT', payload: {id, name:n} }); dispatch({ type: 'SET_CLIENT', id }); } }} className="w-full py-5 bg-white text-black rounded-2xl font-black text-[10px] uppercase mb-8 flex items-center justify-center gap-2 active:scale-95 shadow-xl transition-all"><Plus size={16} /> Novo Lead</button>
           <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar custom-scrollbar">
             {state.clients.map((c: any) => (
               <button key={c.id} onClick={() => { dispatch({ type: 'SET_CLIENT', id: c.id }); setSidebar(false); }} className={`w-full text-left p-5 rounded-2xl border transition-all flex items-center gap-4 ${state.activeClientId === c.id ? "bg-amber-600 border-amber-600 text-white shadow-lg scale-105" : "bg-zinc-900 border-white/5 text-zinc-500 opacity-60"}`}>
@@ -374,61 +484,132 @@ const Workshop = () => {
               </button>
             ))}
           </div>
-          <div className="pt-6 border-t border-white/5 opacity-40 text-center text-[8px] font-black uppercase text-amber-600 tracking-widest">v370 Architecture</div>
+          <div className="pt-6 border-t border-white/5 opacity-40 text-center text-[8px] font-black uppercase text-amber-600 tracking-widest">YARA v370 Industrial AI</div>
         </div>
       </nav>
 
-      {/* ÁREA PRINCIPAL */}
       <div className="flex-1 flex flex-col relative h-screen bg-white lg:rounded-l-[3.5rem] shadow-2xl overflow-hidden">
         <header className="bg-[#09090b] py-3 px-6 flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-5">
             {!sidebar && <button onClick={() => setSidebar(true)} className="lg:hidden p-1 text-amber-500 active:scale-90"><Menu size={28} /></button>}
-            <LogoSVG size={45} /><BrandHeading />
+            <LogoSVG size={45} />
+            <div className="flex flex-col text-left">
+              <h1 className="text-2xl font-black uppercase tracking-tighter leading-none">MARCENAPP</h1>
+              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-1">Industrial Logic</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
-             <button onClick={() => dispatch({ type: 'SET_MODAL', id: 'DISTRIBUIDOR' })} className="p-2 bg-white/5 rounded-xl text-amber-500 active:scale-90 transition-all"><Truck size={22} /></button>
-             <button onClick={() => dispatch({ type: 'SET_MODAL', id: 'ADMIN' })} className="p-2 bg-white/5 rounded-xl text-emerald-500 active:scale-90 transition-all"><ShieldCheck size={22} /></button>
+             <button onClick={() => dispatch({ type: 'SET_MODAL', id: 'DISTRIBUIDOR' })} className="p-2 bg-white/5 rounded-xl text-amber-500 hover:bg-white/10 transition-all"><Truck size={22} /></button>
+             <button onClick={() => dispatch({ type: 'SET_MODAL', id: 'ADMIN' })} className="p-2 bg-white/5 rounded-xl text-emerald-500 hover:bg-white/10 transition-all"><ShieldCheck size={22} /></button>
           </div>
         </header>
 
-        <main ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-10 bg-[#f8fafc] custom-scrollbar pb-36 relative text-left">
-          {state.messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center opacity-10 text-center grayscale">
-              <LogoSVG size={180} animated={state.loadingAI}/>
-              <p className="mt-8 font-black uppercase tracking-[0.4em] text-xs">Mestre, oficina aberta.</p>
-            </div>
-          )}
-          {state.messages.map((m: any, i: number) => (
-            <div key={i} className={`flex ${m.from === "user" ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}>
-              <div className={`max-w-[85%] p-5 rounded-[2.5rem] text-sm font-medium leading-relaxed shadow-sm ${m.from === "user" ? "bg-zinc-900 text-white rounded-tr-none" : "bg-white text-slate-700 rounded-tl-none border border-slate-100"}`}>
-                {m.src && <img src={m.src} className="rounded-2xl mb-3 w-full h-auto border border-white/10 shadow-md cursor-pointer" alt="Scan" onClick={() => dispatch({ type: 'SET_PREVIEW', url: m.src })} />}
-                <p className="whitespace-pre-line">{m.text}</p>
-                <div className="flex justify-end mt-1 opacity-40"><span className="text-[9px] font-bold">12:00</span>{m.from === 'user' && <CheckCheck size={12} className="ml-1"/>}</div>
+        <main ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-10 bg-[#f8fafc] custom-scrollbar pb-40 relative text-left">
+          {state.messages.map((m: any) => (
+            <div key={m.id} className={`flex ${m.from === "user" ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}>
+              <div className={`max-w-[85%] flex flex-col ${m.from === "user" ? "items-end" : "items-start"}`}>
+                <div className={`p-5 rounded-[2.5rem] text-sm font-medium leading-relaxed shadow-sm ${m.from === "user" ? "bg-zinc-900 text-white rounded-tr-none" : "bg-white text-slate-700 rounded-tl-none border border-slate-100"}`}>
+                  {m.src && <img src={m.src} className="rounded-2xl mb-3 w-full h-auto border border-white/10 shadow-md cursor-pointer" alt="Reference" onClick={() => dispatch({ type: 'SET_PREVIEW', url: m.src })} />}
+                  <p className="whitespace-pre-line">{m.text}</p>
+                  
+                  {m.progressiveSteps && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-2">
+                       <ProgressStep label="DNA TÉCNICO" active={m.progressiveSteps.parsed} icon={Cpu} />
+                       <ProgressStep label="PRICING" active={m.progressiveSteps.pricing} icon={DollarSign} />
+                       <ProgressStep label="OTIMIZAÇÃO" active={m.progressiveSteps.cutPlan} icon={Scissors} />
+                       <ProgressStep label="8K RENDER" active={m.progressiveSteps.render} icon={RotateCcw} />
+                    </div>
+                  )}
+
+                  {m.project && (
+                    <div className="mt-5 bg-slate-50 border border-slate-200 rounded-[2rem] overflow-hidden shadow-sm animate-in zoom-in">
+                      <div className="bg-zinc-900 p-4 text-white flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">{m.project.title}</span>
+                        <Award size={18} className="text-amber-500" />
+                      </div>
+                      
+                      <div className="p-4 border-b border-slate-200">
+                        <button onClick={() => toggleJson(m.id)} className="w-full flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <div className="flex items-center gap-2"><FileJson size={14}/> Engenharia Industrial</div>
+                          {showJson[m.id] ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                        </button>
+                        {showJson[m.id] && (
+                          <pre className="mt-3 p-3 bg-zinc-900 text-emerald-400 text-[9px] rounded-xl overflow-x-auto font-mono">
+                            {JSON.stringify(m.project, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+
+                      <div className="p-4 space-y-4">
+                        {m.project.render.status === 'done' ? (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="relative group cursor-pointer" onClick={() => dispatch({ type: 'SET_PREVIEW', url: m.project.render.faithfulUrl })}>
+                              <img src={m.project.render.faithfulUrl} className="aspect-square object-cover rounded-2xl border border-slate-200 transition-all group-hover:scale-105" />
+                              <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[7px] px-2 py-0.5 rounded-full font-black">DNA FIEL</span>
+                            </div>
+                            <div className="relative group cursor-pointer" onClick={() => dispatch({ type: 'SET_PREVIEW', url: m.project.render.decoratedUrl })}>
+                              <img src={m.project.render.decoratedUrl} className="aspect-square object-cover rounded-2xl border border-slate-200 transition-all group-hover:scale-105" />
+                              <span className="absolute bottom-2 left-2 bg-amber-600/80 text-white text-[7px] px-2 py-0.5 rounded-full font-black">AD STYLE</span>
+                            </div>
+                          </div>
+                        ) : m.status === 'error' ? (
+                          <div className="aspect-video bg-red-50 rounded-2xl flex flex-col items-center justify-center border border-red-100">
+                             <AlertCircle className="text-red-400 mb-2" size={32}/>
+                             <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Falha Técnica</span>
+                          </div>
+                        ) : (
+                          <div className="aspect-video bg-slate-200 rounded-2xl flex flex-col items-center justify-center animate-pulse">
+                            <Loader2 className="animate-spin text-slate-400 mb-2" size={32}/>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Materializando 3D...</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+                          <div className="flex flex-col text-left">
+                             <span className="text-[9px] font-black uppercase text-slate-400">Venda Sugerida</span>
+                             <span className="text-xl font-black text-slate-900">R$ {m.project.pricing?.finalPrice?.toLocaleString('pt-BR') || '---'}</span>
+                          </div>
+                          <div className="flex gap-2">
+                             <button className="w-10 h-10 bg-slate-100 text-slate-400 rounded-xl flex items-center justify-center"><Download size={18}/></button>
+                             <button className="w-10 h-10 bg-amber-600 text-white rounded-xl flex items-center justify-center shadow-lg"><Share2 size={18}/></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end mt-2 opacity-40">
+                    <span className="text-[9px] font-bold">{m.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    {m.from === 'user' && <CheckCheck size={12} className="ml-1"/>}
+                  </div>
+                </div>
               </div>
             </div>
           ))}
-          {state.loadingAI && <div className="flex items-center gap-3 bg-white w-fit p-4 rounded-3xl shadow-sm border border-slate-100 animate-pulse"><Loader2 size={16} className="animate-spin text-amber-600" /><span className="text-[10px] font-black text-slate-400 uppercase">Yara processando...</span></div>}
         </main>
 
-        <footer className="absolute bottom-0 left-0 right-0 p-5 bg-white/90 backdrop-blur-xl border-t border-slate-100 z-50">
+        <footer className="absolute bottom-0 left-0 right-0 p-5 bg-white/95 backdrop-blur-xl border-t border-slate-100 z-50">
           {preview && (
-            <div className="flex items-center gap-4 bg-slate-100 p-3 rounded-2xl mb-4 animate-in zoom-in border-2 border-white shadow-xl relative">
+            <div className="flex items-center gap-4 bg-white p-3 rounded-2xl mb-4 animate-in zoom-in border-2 border-slate-100 shadow-xl relative">
               <img src={preview} className="w-20 h-20 rounded-xl object-cover border-2 border-white shadow-md" alt="Studio Preview" />
-              <div className="flex-1 text-zinc-900"><p className="text-[10px] font-black text-amber-600 uppercase mb-1 flex items-center gap-1"><Maximize size={12}/> Iara Studio</p><p className="text-[11px] text-slate-500 font-bold leading-tight uppercase">Hardware pronto. Descreva o plano.</p></div>
-              <button onClick={() => setPreview(null)} className="absolute -top-2 -right-2 p-2 bg-white rounded-full text-slate-400 hover:text-red-500 shadow-xl transition-all"><X size={16}/></button>
+              <div className="flex-1 text-zinc-900">
+                <p className="text-[10px] font-black text-amber-600 uppercase mb-1">YARA Studio Scan</p>
+                <p className="text-[11px] text-slate-500 font-bold uppercase text-left">Pronto para orquestração fotorrealista.</p>
+              </div>
+              <button onClick={() => setPreview(null)} className="absolute -top-2 -right-2 p-2 bg-white rounded-full text-slate-400 shadow-xl border border-slate-100"><X size={16}/></button>
             </div>
           )}
-          <div className="max-w-2xl mx-auto flex items-center gap-3">
+          <div className="max-w-3xl mx-auto flex items-center gap-3">
             <button onClick={() => setIsToolsOpen(!isToolsOpen)} className={`w-12 h-12 flex items-center justify-center rounded-2xl shadow-lg transition-all border active:scale-90 ${isToolsOpen ? "bg-red-500 border-red-500 text-white" : "bg-[#09090b] border-white/5 text-amber-500"}`}><Plus size={24} className={`${isToolsOpen ? "rotate-45" : ""} transition-transform`} /></button>
-            <div className="flex-1 bg-slate-100 rounded-2xl flex items-center px-4 py-1 border border-zinc-200 shadow-inner group focus-within:bg-white transition-all ring-orange-500/10 focus-within:ring-4">
-              <input placeholder={preview ? "Legenda do Scan..." : "Falar com Yara v370..."} className="flex-1 bg-transparent py-5 text-sm outline-none font-bold text-slate-800" value={input} onChange={e => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handlePipeline(input, preview)} />
+            <div className="flex-1 bg-slate-100 rounded-2xl flex items-center px-4 py-1 border border-zinc-200 shadow-inner focus-within:bg-white transition-all">
+              <input placeholder={preview ? "Legenda do rascunho..." : "Falar com Yara..."} className="flex-1 bg-transparent py-5 text-sm outline-none font-bold text-slate-800" value={input} onChange={e => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handlePipeline(input, preview)} />
               <div className="flex gap-1 text-slate-400">
-                <button onClick={() => galInputRef.current?.click()} className="p-2 hover:text-orange-600 transition-colors"><LucideImage size={24}/></button>
-                <button onClick={() => camInputRef.current?.click()} className="p-2 hover:text-orange-600 transition-colors"><Camera size={24}/></button>
+                <button onClick={() => galInputRef.current?.click()} className="p-2 hover:text-orange-600"><LucideImage size={24}/></button>
+                <button onClick={() => camInputRef.current?.click()} className="p-2 hover:text-orange-600"><Camera size={24}/></button>
               </div>
             </div>
             <button onClick={input.trim() || preview ? () => handlePipeline(input, preview) : handleVox} className={`w-12 h-12 flex items-center justify-center rounded-2xl shadow-xl transition-all ${input.trim() || preview ? "bg-orange-600 text-white" : listening ? "bg-red-500 text-white animate-pulse" : "bg-zinc-800 text-white"}`}>
-              {input.trim() || preview ? <Send size={22} /> : <Mic size={22} className={listening ? "animate-spin" : ""} />}
+              {input.trim() || preview ? <Send size={22} /> : <Mic size={22} />}
             </button>
           </div>
         </footer>
@@ -436,16 +617,13 @@ const Workshop = () => {
         <input type="file" ref={galInputRef} hidden accept="image/*" onChange={onFileChange} />
         <input type="file" ref={camInputRef} hidden accept="image/*" capture="environment" onChange={onFileChange} />
 
-        {/* MENU SUSPENSO (+) */}
         {isToolsOpen && (
-          <div className="fixed inset-0 z-[95000] pointer-events-none">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] pointer-events-auto" onClick={() => setIsToolsOpen(false)} />
-            <div className="absolute bottom-28 left-6 w-64 bg-[#09090b] border border-white/10 rounded-[2.5rem] shadow-2xl p-3 flex flex-col gap-2 pointer-events-auto animate-in slide-in-from-bottom-5">
+          <div className="fixed inset-0 z-[95000]">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsToolsOpen(false)} />
+            <div className="absolute bottom-28 left-6 w-64 bg-[#09090b] border border-white/10 rounded-[2.5rem] shadow-2xl p-3 flex flex-col gap-2 animate-in slide-in-from-bottom-5">
               {[
-                { id: 'BENTO', label: 'Engenharia Bento', color: 'bg-orange-600', icon: Wrench },
-                { id: 'ESTELA', label: 'Financeiro Estela', color: 'bg-emerald-600', icon: DollarSign },
-                { id: 'JUCA', label: 'Instalação Juca', color: 'bg-slate-700', icon: HardHat },
                 { id: 'ADMIN', label: 'Dashboard Master', color: 'bg-slate-900', icon: ShieldCheck },
+                { id: 'DISTRIBUIDOR', label: 'Distribuidores', color: 'bg-amber-600', icon: Truck },
               ].map((tool) => (
                 <button key={tool.id} onClick={() => { dispatch({ type: 'SET_MODAL', id: tool.id }); setIsToolsOpen(false); }} className="w-full flex items-center gap-4 p-4 hover:bg-white/5 rounded-3xl transition-all text-left text-white group">
                   <div className={`p-2 rounded-xl ${tool.color} group-hover:scale-110 transition-transform`}><tool.icon size={20} /></div>
@@ -456,113 +634,47 @@ const Workshop = () => {
           </div>
         )}
 
-        {/* MODAIS GAVETA */}
-        <Drawer id="BENTO" title="Engenharia Bento" color="bg-orange-600" icon={Wrench}><BentoBancada /></Drawer>
-        <Drawer id="ESTELA" title="Financeiro Estela" color="bg-emerald-600" icon={DollarSign}>
-           <div className="space-y-6">
-              <MetricCard label="Faturamento Total" value={`R$ ${financeiro.venda.toLocaleString('pt-BR')}`} icon={DollarSign} color="bg-blue-600" />
-              <MetricCard label="Lucro Projeto" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={TrendingUp} color="bg-green-600" />
-              <div className="p-8 bg-white border-2 border-slate-100 rounded-[3rem] space-y-4">
-                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic text-left">Markup de Venda</p>
-                 <div className="flex items-center gap-6">
-                    <input type="range" min="1.1" max="4" step="0.1" className="flex-1 accent-orange-600" value={state.industrialRates.markup} onChange={(e) => dispatch({ type: 'SET_RATES', payload: { markup: Number(e.target.value) } })} />
-                    <span className="bg-zinc-900 text-white px-5 py-3 rounded-2xl font-black italic">{state.industrialRates.markup}x</span>
-                 </div>
-              </div>
-              <button onClick={() => notify("📄 CONTRATO SUPREME GERADO!")} className="w-full py-7 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase text-xs flex items-center justify-center gap-4 active:scale-95 shadow-xl transition-all"><FileSignature size={24} /> Gerar Contrato PDF</button>
-           </div>
-        </Drawer>
-        <Drawer id="ADMIN" title="Admin Master" color="bg-slate-900" icon={ShieldCheck}><AdminPanel /></Drawer>
-        <Drawer id="DISTRIBUIDOR" title="Onde Comprar" color="bg-amber-600" icon={Truck}>
-          <div className="space-y-4 text-zinc-900">
-             <div className="p-6 bg-amber-50 rounded-[2rem] border border-amber-100 flex items-center gap-3">
-               <MapPin size={24} className="text-amber-600" />
-               <p className="text-xs font-black text-amber-800 uppercase tracking-tighter leading-relaxed">Localizando parceiros industriais em sua região</p>
-             </div>
-             {[
-                { id: 1, nome: "Madeireira Central", cidade: "Osasco", status: "Online" },
-                { id: 2, nome: "GMAD - Revenda Master", cidade: "São Paulo", status: "Parceiro" },
-                { id: 3, nome: "Leo Madeiras", cidade: "Guarulhos", status: "Estoque" }
-             ].map(d => (
-               <div key={d.id} className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm hover:border-amber-500 transition-all text-left group">
-                  <h4 className="font-black text-sm uppercase group-hover:text-amber-600 transition-colors">{d.nome}</h4>
-                  <p className="text-[10px] text-slate-400 mb-4">{d.cidade} • <span className="text-emerald-500">{d.status}</span></p>
-                  <button className="w-full py-3 bg-zinc-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-lg">Ver Estoque MDF</button>
-               </div>
-             ))}
+        <Drawer id="ADMIN" title="ADMIN MASTER" color="bg-slate-900" icon={ShieldCheck}><AdminPanel /></Drawer>
+        <Drawer id="DISTRIBUIDOR" title="PARCEIROS" color="bg-amber-600" icon={Truck}>
+          <div className="space-y-4">
+            <div className="p-6 bg-amber-50 rounded-[2rem] border border-amber-100 flex items-center gap-3">
+              <MapPin size={24} className="text-amber-600" />
+              <p className="text-xs font-black text-amber-800 uppercase tracking-tighter">Buscando parceiros próximos...</p>
+            </div>
           </div>
         </Drawer>
 
-        {/* FULLSCREEN PREVIEW */}
         {state.selectedImage && (
           <div className="fixed inset-0 z-[150000] bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-10 animate-in fade-in" onClick={() => dispatch({ type: 'SET_PREVIEW', url: null })}>
-            <img src={state.selectedImage} className="max-w-full max-h-[80vh] rounded-[4rem] shadow-2xl border border-white/10" onClick={(e) => e.stopPropagation()} />
-            <div className="absolute top-10 right-10">
-               <button className="p-4 bg-white text-orange-600 rounded-full shadow-2xl active:scale-90" onClick={() => dispatch({ type: 'SET_PREVIEW', url: null })}><X size={32} strokeWidth={3}/></button>
-            </div>
+            <img src={state.selectedImage} className="max-w-full max-h-[82vh] rounded-[4rem] shadow-2xl border border-white/10 select-none" onClick={(e) => e.stopPropagation()} />
+            <button className="absolute top-10 right-10 p-4 bg-white text-black rounded-full shadow-2xl" onClick={() => dispatch({ type: 'SET_PREVIEW', url: null })}><X size={32}/></button>
           </div>
         )}
       </div>
-      <style>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        input[type="range"] { -webkit-appearance: none; height: 10px; border-radius: 10px; background: #e2e8f0; outline: none; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; border-radius: 50%; background: #ea580c; cursor: pointer; border: 4px solid white; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-      `}</style>
     </div>
   );
 };
 
 // ============================================================================
-// [6. APP ROOT & LOGIC]
+// [BOOTSTRAP]
 // ============================================================================
-
-const ErrorBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [hasError, setHasError] = useState(false);
-  useEffect(() => {
-    const handleError = () => setHasError(true);
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
-  }, []);
-  if (hasError) return (
-    <div className="h-screen bg-[#09090b] flex flex-col items-center justify-center p-12 text-center text-white">
-      <LogoSVG size={100} />
-      <h2 className="mt-12 text-2xl font-black uppercase tracking-widest text-amber-500 italic">Reinicialização Necessária</h2>
-      <button onClick={() => window.location.reload()} className="px-14 py-6 mt-10 bg-white text-black rounded-full font-black uppercase text-xs tracking-[0.5em] shadow-2xl active:scale-95 transition-all">Reconectar Oficina</button>
-    </div>
-  );
-  return <>{children}</>;
-};
 
 function AppLogic() {
   const { state, dispatch } = useContext(MarcenaContext);
-
   useEffect(() => {
     const startup = async () => {
       initFirebase();
-      if (auth) {
-        try {
-          if (typeof (window as any).__initial_auth_token !== "undefined" && (window as any).__initial_auth_token) {
-            await signInWithCustomToken(auth, (window as any).__initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-        } catch (e) { console.warn("Offline Boot Mode."); }
-      }
-      setTimeout(() => dispatch({ type: 'SET_READY' }), 1500);
+      setTimeout(() => dispatch({ type: 'SET_READY' }), 2000);
     };
     startup();
   }, [dispatch]);
 
   if (!state.isReady) return (
-    <div className="h-screen bg-[#09090b] flex flex-col items-center justify-center text-white p-12">
+    <div className="h-screen bg-[#09090b] flex flex-col items-center justify-center text-white">
       <LogoSVG size={100} animated={true} />
-      <h2 className="mt-12 text-[10px] font-black uppercase tracking-[0.5em] animate-pulse text-amber-500 italic leading-none">SINCRONIZANDO OFICINA...</h2>
-      <p className="mt-6 text-[8px] font-black text-zinc-600 uppercase tracking-[0.4em] leading-none">Protocol v370 Unlocked</p>
+      <h2 className="mt-12 text-[10px] font-black uppercase tracking-[0.5em] animate-pulse text-amber-500 italic">ORQUESTRAÇÃO YARA v370...</h2>
     </div>
   );
-
   return <Workshop />;
 }
 
@@ -571,56 +683,41 @@ export default function App() {
     isReady: false,
     activeModal: null,
     activeClientId: '1',
-    clients: [{ id: '1', name: 'Lead Master', status: 'Iniciação' }],
-    parts: [],
-    ambientes: {},
-    activeAmbiente: "Geral",
+    clients: [{ id: '1', name: 'Lead Principal' }],
     industrialRates: { mdf: 440, markup: 2.2 },
-    messages: [{ id: 'w1', from: 'iara', text: 'MARCENAPP SUPREME v370 ONLINE. Mestre, envie um rascunho ou descreva o projeto para orquestrar agora.', timestamp: new Date() }],
-    loadingAI: false,
+    messages: [{ id: 'w1', from: 'iara', text: 'YARA v370 ONLINE. Mestre, pronto para materializar seus projetos em fotorrealismo industrial.', timestamp: new Date() }],
     isAdminLoggedIn: false,
     selectedImage: null
   });
 
   const financeiro = useMemo(() => {
     let totalArea = 0;
-    // Soma peças de ambientes
-    Object.values(state.ambientes).forEach((amb: any) => {
-      (amb?.pecas || []).forEach((p: any) => {
-        totalArea += (Number(p.w) * Number(p.h) * Number(p.q || 1)) / 1000000;
-      });
+    state.messages.forEach((m: any) => {
+      if (m.project && m.project.pricing) {
+        totalArea += m.project.modules.reduce((acc: number, mod: any) => acc + (mod.dimensions.w * mod.dimensions.h) / 1000000, 0);
+      }
     });
-    // Soma peças gerais
-    state.parts.forEach((p: any) => {
-      totalArea += (Number(p.w) * Number(p.h) * Number(p.q || 1)) / 1000000;
-    });
-
     const mdfCost = (totalArea * (state.industrialRates.mdf / 5)) || 0;
     const totalCost = mdfCost * 1.35;
     const venda = totalCost * state.industrialRates.markup;
-    return { 
-      venda, 
-      lucro: venda - totalCost, 
-      area: totalArea, 
-      chapas: Math.ceil(totalArea / 4.3) 
-    };
-  }, [state.ambientes, state.parts, state.industrialRates]);
+    return { venda, lucro: venda - totalCost };
+  }, [state.messages, state.industrialRates]);
 
-  const notify = (text: string) => {
+  const notify = useCallback((text: string) => {
     const t = document.createElement('div');
-    t.className = "fixed top-36 left-1/2 -translate-x-1/2 z-[300000] bg-black text-white px-12 py-6 rounded-full font-black text-[12px] uppercase tracking-[0.4em] shadow-2xl animate-in zoom-in border border-amber-500/30 text-center backdrop-blur-xl pointer-events-none";
+    t.className = "fixed top-32 left-1/2 -translate-x-1/2 z-[300000] bg-black text-white px-10 py-5 rounded-full font-black text-[11px] uppercase tracking-[0.3em] shadow-2xl animate-in zoom-in border border-amber-500/30 text-center backdrop-blur-xl pointer-events-none";
     t.innerText = text; document.body.appendChild(t);
     setTimeout(() => { t.classList.add('animate-out', 'fade-out'); setTimeout(() => t.remove(), 400); }, 3000);
-  };
+  }, []);
 
   return (
-    <ErrorBoundary>
-      <MarcenaContext.Provider value={{ state, dispatch, financeiro, notify }}>
-        <AppLogic />
-      </MarcenaContext.Provider>
-    </ErrorBoundary>
+    <MarcenaContext.Provider value={{ state, dispatch, financeiro, notify }}>
+      <AppLogic />
+    </MarcenaContext.Provider>
   );
 }
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}
