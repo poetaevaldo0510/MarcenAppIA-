@@ -6,7 +6,7 @@ import {
   Wrench, DollarSign, Eye, HardHat, X, Mic, Calendar,
   TrendingUp, Users, RotateCcw, Rotate3d, Package, FileSignature, 
   CheckCircle, ArrowUpRight, Cpu, Menu, Award, PlayCircle, 
-  LucideImage, Camera, Send, Trash2, AlertTriangle, BarChart3,
+  Image as LucideImage, Camera, Send, Trash2, AlertTriangle, BarChart3,
   Plus, Search, Filter, ClipboardList, Hammer, Zap, UserPlus,
   ChevronRight, Smartphone, LayoutDashboard, MessageSquare, Download, Share2, Loader2, Save, UploadCloud
 } from 'lucide-react';
@@ -31,7 +31,7 @@ import {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // ============================================================================
-// [0. UTILITÁRIOS - YARA PARSERS (REFINADO PARA MATERIAIS PREMIUM)]
+// [0. UTILITÁRIOS - YARA PARSERS (REFINADO)]
 // ============================================================================
 
 const YaraParsers = {
@@ -56,7 +56,6 @@ const YaraParsers = {
           let detectedFinish = 'Padrão Industrial';
           let costMultiplier = 1.0;
 
-          // Mapeamento industrial refinado para acabamentos específicos
           if (rawMaterial.includes('freijó') || rawFinish.includes('freijó')) {
             detectedMaterial = 'MDF 18mm Freijó Premium';
             detectedFinish = rawFinish.includes('fosco') ? 'Verniz Fosco Acetinado' : 'Madeira Natural';
@@ -97,13 +96,13 @@ const YaraParsers = {
         contents: [{
           parts: [
             { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
-            { text: "Você é um mestre marceneiro brasileiro. Transcreva o áudio tecnicamente em português, mantendo todas as medidas em milímetros (mm). Ignore ruídos. Retorne apenas o texto da transcrição." }
+            { text: "Você é um mestre marceneiro. Transcreva o áudio tecnicamente em português (Brasil), focando em medidas (mm) e materiais. Retorne apenas o texto transcrito." }
           ]
         }]
       });
       return res.text || "";
     } catch (e) {
-      throw new Error("Erro no STT Industrial.");
+      throw new Error("Erro no STT.");
     }
   },
 
@@ -113,31 +112,26 @@ const YaraParsers = {
 };
 
 // ============================================================================
-// [1. ENGINES INDUSTRIAIS (CORE SUPREME V283)]
+// [1. ENGINES INDUSTRIAIS (CORE SUPREME)]
 // ============================================================================
 
 const PricingEngine = {
-  // Cálculo preciso: Custo + 12% Imposto + 38% Margem (Markup configurável)
   calculate: (project: Partial<ProjectData>, industrialRates: { mdf: number; markup: number }) => {
     const modules = project.modules || [];
     const area = YaraParsers.calculateTotalArea(modules);
     
-    // Custo ponderado pelos materiais detectados
     const weightedMaterialCost = modules.reduce((acc, m: any) => {
       const mArea = (m.dimensions.w * m.dimensions.h) / 1000000;
       return acc + (mArea * industrialRates.mdf * (m.costMultiplier || 1.0));
     }, 0);
 
-    // Considera perda técnica de 18% no retalho
     const sheetsCost = Math.ceil(weightedMaterialCost / (MDF_SHEET_AREA * 0.82)) * industrialRates.mdf;
     const labor = area * LABOR_RATE_M2;
-    const overhead = 1.35; // Custos indiretos (35%)
+    const overhead = 1.35; 
     
     const directCost = (sheetsCost + labor) * overhead;
-    const taxRate = 0.12; // Impostos industriais 12%
+    const taxRate = 0.12; // 12% Imposto
     const costWithTax = directCost * (1 + taxRate);
-    
-    // Preço final aplicando o markup configurável (Default 1.38 para 38% margem)
     const finalPrice = costWithTax * industrialRates.markup;
     
     return {
@@ -146,25 +140,22 @@ const PricingEngine = {
       labor,
       taxAmount: costWithTax - directCost,
       finalPrice: finalPrice,
-      materials: [{ name: 'MDF e Ferragens Estruturais', cost: sheetsCost }],
+      materials: [{ name: 'MDF e Estruturais', cost: sheetsCost }],
       creditsUsed: 25
     };
   }
 };
 
 const CNCOptimizer = {
-  // Otimização CNC > 90% de eficiência com validação de mesa industrial
   optimize: async (project: Partial<ProjectData>) => {
     const modules = project.modules || [];
     const area = YaraParsers.calculateTotalArea(modules);
-    
-    // Mesa CNC Padrão: 2750 x 1840 mm
     const MAX_W = 2750;
     const MAX_H = 1840;
     const oversized = modules.filter(m => m.dimensions.w > MAX_W || m.dimensions.h > MAX_H);
-    if (oversized.length > 0) throw new Error(`DNA Inválido: Peças excedem limite CNC (${MAX_W}x${MAX_H}mm).`);
+    if (oversized.length > 0) throw new Error(`Peças excedem limite CNC (${MAX_W}x${MAX_H}mm).`);
 
-    const rawSheetsNeeded = area / (MDF_SHEET_AREA * 0.94); // Simula 94% de aproveitamento
+    const rawSheetsNeeded = area / (MDF_SHEET_AREA * 0.94); 
     const sheetsNeeded = Math.max(1, Math.ceil(rawSheetsNeeded));
     const efficiency = (area / (sheetsNeeded * MDF_SHEET_AREA)) * 100;
     
@@ -181,7 +172,6 @@ const CNCOptimizer = {
 };
 
 const RenderEngine = {
-  // Geração fotorrealista com Estilo Architectural Digest (AD)
   generate: async (project: Partial<ProjectData>, sketchData?: string, style: string = 'Architectural Digest Style') => {
     const gen = async (prompt: string, ref?: string) => {
       const parts: any[] = [];
@@ -200,12 +190,12 @@ const RenderEngine = {
     const fin = project.modules?.[0]?.finish || 'Natural';
 
     const stylePrompts: Record<string, string> = {
-      'Industrial CAD': `INDUSTRIAL CAD TECHNICAL VIEW. Project: "${project.title}". 3D render focused on structure, joinery and materials. Studio lighting, blueprints style background. ${mat}, ${fin}.`,
-      'Architectural Digest Style': `HIGH-END INTERIOR PHOTOGRAPHY BY ARCHITECTURAL DIGEST. Project: "${project.title}". Bespoke designer furniture in a luxury minimalist setting. Soft cinematic morning sun, warm global illumination, 8k realistic professional staging. ${mat}, ${fin}.`,
-      'Sketch Fiel': `WOODWORKING HAND-DRAWN SKETCH. Project: "${project.title}". Materialize the 2D sketch into 3D maintaining proportions exactly. Show realistic ${mat} wood textures and grain.`
+      'Industrial CAD': `INDUSTRIAL CAD TECHNICAL VIEW. ${project.title}. High detail joinery. White studio environment. ${mat}, ${fin}.`,
+      'Architectural Digest Style': `ARCHITECTURAL DIGEST INTERIOR PHOTOGRAPHY. ${project.title}. Luxury minimalist living room, cinematic lighting, ultra-realistic staging. ${mat}, ${fin}.`,
+      'Sketch Fiel': `WOODWORKING ARTISTIC SKETCH. Proportions 1:1 match. Realistic ${mat} texture applied to the original drawing.`
     };
 
-    const faithfulPrompt = `WOODWORKING TECHNICAL MATERIALIZATION. Project: "${project.title}". Proportions 1:1 match with original sketch. ${mat} details. High precision view.`;
+    const faithfulPrompt = `WOODWORKING TECHNICAL 1:1. Proportions exact match. ${mat}. Precision view.`;
     const selectedPrompt = stylePrompts[style] || stylePrompts['Architectural Digest Style'];
 
     const [faithful, decorated] = await Promise.all([
@@ -224,7 +214,10 @@ const YaraPipeline = {
     const res = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [{ role: 'user', parts }],
-      config: { systemInstruction: IARA_SYSTEM_PROMPT, responseMimeType: "application/json" }
+      config: { 
+        systemInstruction: IARA_SYSTEM_PROMPT, 
+        responseMimeType: "application/json" 
+      }
     });
     const data = YaraParsers.extractJSON(res.text || '');
     if (!data) return null;
@@ -233,7 +226,7 @@ const YaraPipeline = {
       projectId: `PRJ-${Date.now()}`,
       title: ext.title || "Projeto Orquestrado",
       description: ext.description,
-      environment: ext.environment,
+      environment: ext.environment || { width: 0, height: 0, depth: 0 },
       modules: ext.modules || [],
       complexity: ext.complexity || 2,
       source: { type: input.attachment ? 'image' : 'text', content: input.text },
@@ -273,7 +266,7 @@ const marcenaReducer = (state: MarcenaState, action: any): MarcenaState => {
 const MarcenaContext = createContext<any>(null);
 
 // ============================================================================
-// [3. COMPONENTES DE UI (GRANULARIDADE REFINADA)]
+// [3. COMPONENTES DE UI]
 // ============================================================================
 
 const ProgressStep: React.FC<{ label: string; active: boolean; done: boolean; error?: boolean }> = ({ label, active, done, error }) => (
@@ -313,7 +306,7 @@ const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void 
             <ProgressStep label="DNA Parsing" active={!steps.parsed} done={steps.parsed} />
             <ProgressStep label="Engine Render" active={steps.parsed && !steps.render} done={steps.render} />
             <ProgressStep label="Pricing (12%+38%)" active={steps.render && !steps.pricing} done={steps.pricing} />
-            <ProgressStep label="Nesting CNC >90%" active={steps.pricing && !steps.cutPlan} done={steps.cutPlan} />
+            <ProgressStep label="Nesting CNC >94%" active={steps.pricing && !steps.cutPlan} done={steps.cutPlan} />
           </div>
         )}
 
@@ -330,16 +323,15 @@ const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void 
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.faithfulUrl!)}>
-                  <img src={project.render.faithfulUrl} className="w-full aspect-square object-cover rounded-[2rem] shadow-md border-2 border-white group-hover:brightness-90 transition-all" />
+                  <img src={project.render.faithfulUrl} className="w-full aspect-square object-cover rounded-[2rem] shadow-md border-2 border-white transition-all" />
                   <span className="absolute bottom-3 left-3 bg-black/70 text-white text-[7px] px-2 py-1 rounded-full font-black uppercase tracking-tighter backdrop-blur-sm">DNA FIEL 1:1</span>
                 </div>
                 <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.decoratedUrl!)}>
-                  <img src={project.render.decoratedUrl} className="w-full aspect-square object-cover rounded-[2rem] shadow-md border-2 border-white group-hover:brightness-90 transition-all" />
-                  <span className="absolute bottom-3 left-3 bg-amber-600/90 text-white text-[7px] px-2 py-1 rounded-full font-black uppercase tracking-tighter italic backdrop-blur-sm italic">AD SHOWROOM</span>
+                  <img src={project.render.decoratedUrl} className="w-full aspect-square object-cover rounded-[2rem] shadow-md border-2 border-white transition-all" />
+                  <span className="absolute bottom-3 left-3 bg-amber-600/90 text-white text-[7px] px-2 py-1 rounded-full font-black uppercase tracking-tighter italic backdrop-blur-sm">AD SHOWROOM</span>
                 </div>
               </div>
 
-              {/* Seletor de Estilos Industrial */}
               <div className="flex flex-wrap gap-2 py-3 border-y border-zinc-200/50">
                 {['Industrial CAD', 'Architectural Digest Style', 'Sketch Fiel'].map(style => (
                   <button 
@@ -354,14 +346,14 @@ const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void 
               
               <div className="flex justify-between items-center pt-2">
                 <div className="text-left">
-                  <p className="text-[10px] font-black text-zinc-400 uppercase italic tracking-widest mb-1 leading-none">Venda Master (12%+38%)</p>
+                  <p className="text-[10px] font-black text-zinc-400 uppercase italic tracking-widest mb-1 leading-none">Venda Master Industrial</p>
                   <p className="text-4xl font-black text-zinc-900 tracking-tighter leading-none italic">R$ {project.pricing.finalPrice?.toLocaleString('pt-BR')}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                    <div className="flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase italic">
                       <Zap size={12}/> Nesting CNC {project.cutPlan.optimizationScore}%
                    </div>
-                   <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`🚀 MarcenApp Master: Projeto ${project.title} orquestrado!`)}`, '_blank')} className="w-14 h-14 bg-[#09090b] text-white rounded-[1.8rem] flex items-center justify-center shadow-2xl active:scale-90 border border-white/5 transition-all">
+                   <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`🚀 MarcenApp Supreme: Projeto ${project.title} orquestrado!`)}`, '_blank')} className="w-14 h-14 bg-[#09090b] text-white rounded-[1.8rem] flex items-center justify-center shadow-2xl active:scale-90 border border-white/5 transition-all">
                     <MessageSquare size={24} className="text-amber-500" />
                    </button>
                 </div>
@@ -395,28 +387,35 @@ const WorkshopInner = () => {
     dispatch({ type: 'ADD_MESSAGE', payload: userMsg });
     setInputText("");
     const iaraId = `i-${Date.now()}`;
-    dispatch({ type: 'ADD_MESSAGE', payload: { id: iaraId, type: MessageType.IARA, content: "YARA 3.0: Iniciando processamento v283 Supreme...", timestamp: new Date(), status: 'processing', progressiveSteps: { parsed: false, render: false, pricing: false, cutPlan: false } } });
+    dispatch({ 
+      type: 'ADD_MESSAGE', 
+      payload: { 
+        id: iaraId, type: MessageType.IARA, 
+        content: "YARA 3.0: Iniciando processamento v283 Supreme...", 
+        timestamp: new Date(), 
+        status: 'processing', 
+        progressiveSteps: { parsed: false, render: false, pricing: false, cutPlan: false } 
+      } 
+    });
     try {
-      // 1. Parsing
       const parsed = await YaraPipeline.parse({ text, attachment });
       if (!parsed) throw new Error("DNA Parsing falhou.");
       dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: parsed, stepUpdate: { parsed: true } });
 
-      // 2. Pricing & CNC (Paralelo ao render)
       const pricing = PricingEngine.calculate(parsed as ProjectData, industrialRates);
       dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { pricing }, stepUpdate: { pricing: true } });
+      
       const cutPlan = await CNCOptimizer.optimize(parsed as ProjectData);
       dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { cutPlan }, stepUpdate: { cutPlan: true } });
 
-      // 3. Render
       const renderRes = await RenderEngine.generate(parsed as ProjectData, attachment?.data);
       dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { render: renderRes }, stepUpdate: { render: true } });
 
       const finalProject = { ...parsed, render: renderRes, pricing, cutPlan };
-      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Engenharia Master v283 concluída. DNA materializado com fotorrealismo AD Style e plano de corte validado (>90%).", project: finalProject, status: 'done' } });
-      notify("🚀 Orquestração v283 Supreme Finalizada!");
+      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Engenharia Master concluída com sucesso.", project: finalProject, status: 'done' } });
+      notify("🚀 Orquestração Finalizada!");
     } catch (e: any) {
-      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: e.message || "Erro crítico no motor industrial.", status: 'error' } });
+      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: e.message || "Erro crítico.", status: 'error' } });
     }
   };
 
@@ -437,7 +436,7 @@ const WorkshopInner = () => {
             const transcription = await YaraParsers.parseVoice(base64);
             if (transcription) {
               notify(`✅ Comando: "${transcription}"`);
-              handlePipeline(transcription); // Fluxo automático STT -> Pipeline
+              handlePipeline(transcription); 
             }
           } catch (err) {
             notify("❌ Erro no STT.");
@@ -454,9 +453,24 @@ const WorkshopInner = () => {
 
   const stopVoiceRecording = () => { if (mediaRecorderRef.current) { mediaRecorderRef.current.stop(); setIsRecording(false); } };
 
-  // Persistência Supreme
-  const saveProjects = () => { localStorage.setItem('marcenapp_supreme_v283', JSON.stringify(state.messages)); notify("💾 Projetos Salvos Localmente!"); };
-  const loadProjects = () => { const saved = localStorage.getItem('marcenapp_supreme_v283'); if (saved) { dispatch({ type: 'LOAD_PROJECTS', payload: JSON.parse(saved) }); notify("📂 Projetos Restaurados!"); } else { notify("⚠️ Nenhum registro encontrado."); } };
+  const saveProjects = () => { 
+    localStorage.setItem('marcenapp_supreme_v283_v2', JSON.stringify(state.messages)); 
+    notify("💾 Projetos Salvos!"); 
+  };
+  
+  const loadProjects = () => { 
+    try {
+      const saved = localStorage.getItem('marcenapp_supreme_v283_v2'); 
+      if (saved) { 
+        dispatch({ type: 'LOAD_PROJECTS', payload: JSON.parse(saved) }); 
+        notify("📂 Projetos Restaurados!"); 
+      } else {
+        notify("⚠️ Nenhum registro encontrado.");
+      }
+    } catch (e) {
+      notify("❌ Falha ao carregar dados.");
+    }
+  };
 
   return (
     <div className="flex h-screen bg-[#f0f2f5] overflow-hidden relative font-sans text-left">
@@ -501,15 +515,8 @@ const WorkshopInner = () => {
       <Drawer id="ADMIN" title="Cockpit Master" color="bg-zinc-900" icon={BarChart3}>
         <div className="space-y-6">
           <MetricCard label="Faturamento Previsto" value={`R$ ${financeiro.venda.toLocaleString('pt-BR')}`} icon={<Package size={26}/>} color="bg-blue-50" />
-          <MetricCard label="Lucro (38% Margem)" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={<TrendingUp size={26}/>} color="bg-green-50" highlight />
+          <MetricCard label="Lucro Industrial" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={<TrendingUp size={26}/>} color="bg-green-50" highlight />
           <MetricCard label="Área Industrial Total" value={`${financeiro.area.toFixed(2)} m²`} icon={<Hammer size={26}/>} color="bg-amber-50" />
-          <div className="p-8 bg-[#09090b] rounded-[3rem] mt-6 flex items-center justify-between text-white shadow-2xl relative border border-white/5 overflow-hidden italic">
-             <div className="text-left relative z-10">
-               <p className="text-[10px] font-black uppercase text-amber-500 mb-2 tracking-[0.4em]">Patente v283</p>
-               <h4 className="text-xl font-black italic uppercase tracking-tighter leading-none">Supreme Operação</h4>
-             </div>
-             <Award className="text-amber-500" size={32} />
-          </div>
         </div>
       </Drawer>
 
@@ -522,7 +529,7 @@ const WorkshopInner = () => {
             </div>
             <div className="mt-12 flex gap-8">
                <button className="px-12 py-6 bg-white/5 text-white rounded-full font-black uppercase text-[11px] tracking-[0.4em] border border-white/10 active:scale-95 flex items-center gap-3 shadow-2xl hover:bg-white/10" onClick={(e) => e.stopPropagation()}><Download size={18}/> Baixar Master Render</button>
-               <button className="px-12 py-6 bg-amber-600 text-white rounded-full font-black uppercase text-[11px] tracking-[0.4em] active:scale-95 flex items-center gap-3 shadow-[0_20px_50px_rgba(217,119,6,0.3)] hover:bg-amber-500" onClick={(e) => e.stopPropagation()}><Share2 size={18}/> Enviar Portfólio AD Style</button>
+               <button className="px-12 py-6 bg-amber-600 text-white rounded-full font-black uppercase text-[11px] tracking-[0.4em] active:scale-95 flex items-center gap-3 shadow-[0_20px_50px_rgba(217,119,6,0.3)] hover:bg-amber-500" onClick={(e) => e.stopPropagation()}><Share2 size={18}/> Enviar Portfólio</button>
             </div>
           </div>
         </div>
@@ -532,7 +539,7 @@ const WorkshopInner = () => {
 };
 
 // ============================================================================
-// [5. COMPONENTES AUXILIARES (UI REFINADA)]
+// [5. COMPONENTES AUXILIARES]
 // ============================================================================
 
 const LogoSVG = ({ size = 24 }: { size?: number }) => (
@@ -581,7 +588,7 @@ const Drawer = ({ id, title, color, icon, children }: any) => {
 };
 
 const BentoBancada = () => {
-  const { state, financeiro, notify, industrialRates } = useContext(MarcenaContext);
+  const { state, financeiro, industrialRates } = useContext(MarcenaContext);
   const [showCostDetail, setShowCostDetail] = useState(false);
 
   return (
@@ -607,25 +614,24 @@ const BentoBancada = () => {
             <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-4 italic">Análise Industrial de Custos</h4>
             <div className="space-y-4">
               <div className="flex justify-between text-[11px] font-bold text-zinc-600">
-                <span>Chapa MDF Base:</span>
+                <span>Preço Chapa:</span>
                 <span className="text-zinc-900">R$ {industrialRates.mdf.toLocaleString('pt-BR')}</span>
               </div>
               <div className="flex justify-between text-[11px] font-bold text-zinc-600">
-                <span>Qtd Chapas:</span>
+                <span>Chapas Usadas:</span>
                 <span className="text-zinc-900">{financeiro.chapas} un</span>
               </div>
               <div className="border-t border-amber-200 pt-4 flex justify-between text-[14px]">
-                <span className="font-black text-amber-800 uppercase italic tracking-tighter">Custo Total Mat:</span>
+                <span className="font-black text-amber-800 uppercase italic">Total MDF:</span>
                 <span className="font-black text-amber-900">R$ {(financeiro.chapas * industrialRates.mdf).toLocaleString('pt-BR')}</span>
               </div>
-              <p className="text-[8px] font-black uppercase text-amber-600 tracking-widest text-center mt-2 opacity-60">* Baseado no Plano de Corte v283 Supreme</p>
             </div>
           </div>
         )}
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-[11px] font-black uppercase text-zinc-400 tracking-widest px-2 italic">DNA Industrial Extraído</h3>
+        <h3 className="text-[11px] font-black uppercase text-zinc-400 tracking-widest px-2 italic">DNA Industrial</h3>
         {state.messages.filter(m => m.project).map((msg: Message, idx: number) => (
           <div key={idx} className="bg-white border border-slate-100 rounded-[2.5rem] overflow-hidden shadow-sm hover:border-amber-200 transition-all group">
              <div className="bg-zinc-900 p-5 text-white flex justify-between items-center group-hover:bg-amber-600 transition-colors">
@@ -653,29 +659,28 @@ const BentoBancada = () => {
 };
 
 const EstelaBancada = () => {
-  const { financeiro, industrialRates, setIndustrialRates, notify } = useContext(MarcenaContext);
+  const { financeiro, industrialRates, setIndustrialRates } = useContext(MarcenaContext);
   return (
     <div className="space-y-6 text-zinc-900 text-left">
       <div className={`p-10 rounded-[3rem] border-l-[16px] shadow-2xl transition-all ${financeiro.isLowProfit ? 'border-red-500 bg-red-50' : 'border-emerald-500 bg-emerald-50'}`}>
         <div className="flex justify-between items-start">
            <div className="text-left">
-             <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest italic">Lucro Líquido (38% Margem)</p>
+             <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest italic">Lucro Industrial</p>
              <h3 className={`text-5xl font-black tracking-tighter italic ${financeiro.isLowProfit ? 'text-red-600' : 'text-emerald-600'}`}>R$ {financeiro.lucro.toLocaleString('pt-BR')}</h3>
            </div>
            <TrendingUp size={30} className={financeiro.isLowProfit ? 'text-red-600' : 'text-emerald-600'} />
         </div>
       </div>
       <div className="p-10 bg-zinc-900 rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border-b-4 border-amber-600">
-        <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest mb-3 leading-none italic">Valor de Venda (Imposto 12% Inc.)</p>
+        <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest mb-3 leading-none italic">Valor de Venda (Impostos Inc.)</p>
         <h2 className="text-6xl font-black text-white italic tracking-tighter leading-none">R$ {financeiro.venda.toLocaleString('pt-BR')}</h2>
       </div>
       <div className="p-8 bg-white border border-slate-100 rounded-[2.5rem] space-y-6 shadow-md">
         <div className="flex justify-between items-center">
-           <h3 className="text-[11px] font-black uppercase text-zinc-400 tracking-widest italic">Markup Master v283</h3>
+           <h3 className="text-[11px] font-black uppercase text-zinc-400 tracking-widest italic">Markup Industrial</h3>
            <span className="bg-emerald-600 text-white px-4 py-1.5 rounded-full font-black text-[11px] italic">{industrialRates.markup}x</span>
         </div>
         <input type="range" min="1.1" max="4.0" step="0.05" className="w-full h-2 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-emerald-600" value={industrialRates.markup} onChange={(e: any) => setIndustrialRates({...industrialRates, markup: parseFloat(e.target.value)})} />
-        <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-[0.2em] text-center leading-relaxed">Ajuste fino da lucratividade operacional para orçamentos realistas.</p>
       </div>
     </div>
   );
@@ -686,23 +691,20 @@ const IaraVisionBancada = () => {
   const galleryImages = state.messages
     .filter((m: Message) => m.project && m.project.render.status === 'done')
     .flatMap((m: Message) => [
-      { url: m.project!.render.faithfulUrl, title: `${m.project!.title} (DNA Fiel)` }, 
+      { url: m.project!.render.faithfulUrl, title: `${m.project!.title} (Fiel)` }, 
       { url: m.project!.render.decoratedUrl, title: `${m.project!.title} (AD Style)` }
     ])
     .filter(img => img.url);
   return (
     <div className="space-y-6 text-zinc-900 text-left">
-      <div className="flex items-center justify-between mb-2"><h2 className="text-xl font-black uppercase tracking-widest italic italic">Galeria Master v283</h2></div>
+      <div className="flex items-center justify-between mb-2"><h2 className="text-xl font-black uppercase tracking-widest italic">Portfólio Industrial</h2></div>
       <div className="grid grid-cols-2 gap-5">
         {galleryImages.length === 0 ? (
-          <div className="col-span-2 py-32 text-center opacity-30 italic text-[11px] font-black uppercase tracking-widest">Nenhum DNA materializado ainda.</div>
+          <div className="col-span-2 py-32 text-center opacity-30 italic text-[11px] font-black uppercase">Vazio.</div>
         ) : (
           galleryImages.map((img: any, i: number) => (
-            <div key={i} className="group relative aspect-square bg-zinc-200 rounded-[2.5rem] overflow-hidden shadow-xl cursor-pointer border-4 border-white ring-1 ring-zinc-100 transition-all hover:scale-105" onClick={() => setSelectedImage(img.url)}>
+            <div key={i} className="group relative aspect-square bg-zinc-200 rounded-[2.5rem] overflow-hidden shadow-xl cursor-pointer border-4 border-white transition-all hover:scale-105" onClick={() => setSelectedImage(img.url)}>
               <img src={img.url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                 <Eye size={32} className="text-white" />
-              </div>
             </div>
           ))
         )}
@@ -712,28 +714,19 @@ const IaraVisionBancada = () => {
 };
 
 const JucaBancada = () => (
-  <div className="space-y-6 text-zinc-900 text-left">
-    <div className="p-12 bg-white border border-slate-100 rounded-[3rem] flex flex-col items-center text-center gap-8 shadow-sm">
-      <div className="w-28 h-28 bg-slate-100 text-slate-600 rounded-[3rem] flex items-center justify-center shadow-inner scale-110"><HardHat size={56}/></div>
-      <div className="space-y-3">
-        <h3 className="text-3xl font-black uppercase italic tracking-tighter">Instalação v283</h3>
-        <p className="text-[11px] font-bold text-slate-500 max-w-[280px] leading-relaxed">Roteiro de montagem sincronizado com os motores de engenharia.</p>
-      </div>
-      <button className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.3em] active:scale-95 transition-all shadow-2xl">Gerar Checklist Master</button>
-    </div>
+  <div className="space-y-6 text-zinc-900 text-left text-center p-12 bg-white rounded-[3rem]">
+    <HardHat size={56} className="mx-auto text-slate-400 mb-6" />
+    <h3 className="text-2xl font-black uppercase italic">Instalação</h3>
+    <p className="text-xs text-slate-500 mb-8">Gestão de montagem v283 Supreme.</p>
+    <button className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">Abrir Cronograma</button>
   </div>
 );
 
 const MarceneiroCRMBancada = () => (
-  <div className="space-y-6 text-zinc-900 text-left">
-    <div className="p-12 bg-white border border-slate-100 rounded-[3rem] flex flex-col items-center text-center gap-8 shadow-sm">
-      <div className="w-28 h-28 bg-blue-100 text-blue-600 rounded-[3rem] flex items-center justify-center shadow-inner scale-110"><Users size={56}/></div>
-      <div className="space-y-3">
-        <h3 className="text-3xl font-black uppercase italic tracking-tighter">Pipeline de Clientes</h3>
-        <p className="text-[11px] font-bold text-slate-500 max-w-[280px] leading-relaxed">Gestão de propostas e contratos master MarcenApp Supreme.</p>
-      </div>
-      <button className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-[0.3em] active:scale-95 transition-all shadow-2xl">Dashboard de Propostas</button>
-    </div>
+  <div className="space-y-6 text-zinc-900 text-left text-center p-12 bg-white rounded-[3rem]">
+    <Users size={56} className="mx-auto text-blue-400 mb-6" />
+    <h3 className="text-2xl font-black uppercase italic">Funil de Vendas</h3>
+    <button className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">Acessar CRM</button>
   </div>
 );
 
@@ -759,18 +752,17 @@ const useFinanceiro = (messages: Message[], industrialRates: { mdf: number; mark
 };
 
 // ============================================================================
-// [6. ENTRY POINT SUPREME]
+// [6. APP SUPREME]
 // ============================================================================
 
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(marcenaReducer, {
-    messages: [{ id: 'welcome', type: MessageType.IARA, content: 'Cockpit v283 Supreme Online. Motores industriais recalibrados para alta eficiência (>94% CNC) e fotorrealismo AD Style.', timestamp: new Date(), status: 'done' }],
+    messages: [{ id: 'welcome', type: MessageType.IARA, content: 'Cockpit v283 Supreme Online. Engine Industrial Pronto.', timestamp: new Date(), status: 'done' }],
     isLoading: false,
     isAdminMode: false
   });
   const [activeModal, setActiveModal] = useState<string | null>(null);
   const [manualParts, setManualParts] = useState<any[]>([]);
-  // Iniciamos com markup de 1.38 para representar os 38% de lucro base solicitado
   const [industrialRates, setIndustrialRates] = useState({ mdf: MDF_SHEET_PRICE, markup: 1.38 });
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const financeiro = useFinanceiro(state.messages, industrialRates, manualParts);
@@ -791,9 +783,9 @@ const App: React.FC = () => {
     try {
       const renderRes = await RenderEngine.generate(msg.project, msg.attachment?.data, style);
       dispatch({ type: 'PROGRESS_UPDATE', id: msgId, payload: { render: renderRes }, stepUpdate: { render: true } });
-      notify("✅ Render Industrial Finalizado!");
+      notify("✅ Sucesso!");
     } catch (e) {
-      notify("❌ Erro no Engine de Render.");
+      notify("❌ Erro.");
     }
   };
 
