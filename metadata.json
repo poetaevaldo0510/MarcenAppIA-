@@ -1,8 +1,8 @@
 {
-  "name": "MarcenApp - IA Marceneira",
-  "description": "Uma plataforma inteligente para marcenaria que transforma rascunhos em projetos técnicos, renders realistas, orçamentos e planos de corte.",
   "requestFramePermissions": [
     "camera",
     "microphone"
-  ]
+  ],
+  "name": "",
+  "description": ""
 }
