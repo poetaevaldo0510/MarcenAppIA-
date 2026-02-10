@@ -57,17 +57,17 @@ export interface ProjectData {
 
 export interface Message {
   id: string;
-  type: MessageType;
-  content: string;
-  timestamp: Date;
-  attachment?: Attachment;
+  from: 'user' | 'iara';
+  text: string;
+  timestamp: string;
+  src?: string;
   project?: ProjectData;
   status: 'sent' | 'processing' | 'done' | 'error';
   progressiveSteps?: {
-    parsed: boolean;
-    render: boolean;
-    pricing: boolean;
-    cutPlan: boolean;
+    parsed: 'active' | 'done' | false;
+    render: 'active' | 'done' | false;
+    pricing: 'active' | 'done' | false;
+    cutPlan: 'active' | 'done' | false;
   };
 }
 
