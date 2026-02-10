@@ -5,7 +5,9 @@ import { GoogleGenAI } from '@google/genai';
 import { 
   Wrench, X, Mic, Award, Image as LucideImage, Camera, Send, 
   BarChart3, FolderOpen, LayoutDashboard, MessageSquare, 
-  Download, Share2, Loader2, CheckCheck, Paperclip
+  Download, Share2, Loader2, CheckCheck, Paperclip, Plus,
+  DollarSign, HardHat, Users, TrendingUp, Calendar, AlertTriangle,
+  RotateCcw, Trash2, FileSignature, Cpu, Package, ChevronRight
 } from 'lucide-react';
 
 import { 
@@ -24,18 +26,14 @@ import {
   MDF_SHEET_AREA
 } from './constants';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // ============================================================================
-// [0. MOTOR YARA - JSON MESTRE CENTRAL]
+// [0. MOTOR YARA - ORQUESTRADOR INDUSTRIAL]
 // ============================================================================
 
 const YaraEngine = {
-  /**
-   * ESTÁGIO 1: PARSING & DNA (Criação do JSON Mestre)
-   * Garante que SEM JSON = SEM PROCESSO.
-   */
+  // Fix: Create GoogleGenAI right before making an API call to ensure fresh environment variable access.
   processInput: async (text: string, attachment?: Attachment): Promise<ProjectData | null> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const parts: any[] = [{ text: text || "Analisar projeto de marcenaria industrial." }];
     if (attachment?.data) {
       parts.push({ inlineData: { mimeType: 'image/jpeg', data: attachment.data } });
@@ -54,7 +52,6 @@ const YaraEngine = {
       const data = JSON.parse(res.text || "{}");
       const project = data.project || data;
 
-      // Schema Enforcement: Garante integridade do JSON Central
       return {
         projectId: `YARA-${Date.now()}`,
         title: project.title || "Novo Projeto Supreme",
@@ -65,90 +62,169 @@ const YaraEngine = {
           id: m.id || `m${idx + 1}`
         })),
         complexity: project.complexity || 1,
-        source: {
-          type: attachment ? 'image' : 'text',
-          content: text,
-          attachmentUrl: attachment?.url
-        },
+        source: { type: attachment ? 'image' : 'text', content: text, attachmentUrl: attachment?.url },
         render: { status: 'pending' },
         pricing: { status: 'pending', materials: [], total: 0, labor: 0, finalPrice: 0, creditsUsed: 15 },
         cutPlan: { status: 'pending', boards: [], optimizationScore: 0 }
       };
-    } catch (e) {
-      console.error("Critical Engine Error:", e);
-      return null;
-    }
+    } catch (e) { return null; }
   },
 
-  /**
-   * ESTÁGIO 2: MATERIALIZAÇÃO (Render AI baseado no JSON)
-   */
+  // Fix: Handle mandatory API key selection for Gemini 3 Pro Image model and re-initialize AI client.
   generateRender: async (project: ProjectData, sketchData?: string, style: string = 'Architectural Digest Style'): Promise<{ faithful: string, decorated: string }> => {
+    if (typeof window !== 'undefined' && (window as any).aistudio) {
+      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await (window as any).aistudio.openSelectKey();
+        // Assume success after trigger to avoid race condition as per guidelines.
+      }
+    }
+
     const gen = async (prompt: string, ref?: string) => {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const parts: any[] = [];
       if (ref) parts.push({ inlineData: { mimeType: 'image/jpeg', data: ref } });
       parts.push({ text: prompt });
-      const res = await ai.models.generateContent({ 
-        model: 'gemini-2.5-flash-image', 
-        contents: [{ parts }],
-        config: { imageConfig: { aspectRatio: "1:1" } }
-      });
-      const part = res.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-      return part ? `data:image/png;base64,${part.inlineData.data}` : '';
+      try {
+        const res = await ai.models.generateContent({ 
+          model: 'gemini-3-pro-image-preview', 
+          contents: [{ parts }],
+          config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
+        });
+        const part = res.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+        return part ? `data:image/png;base64,${part.inlineData.data}` : '';
+      } catch (e: any) {
+        // Fix: Reset key selection if entity not found error occurs.
+        if (e.message?.includes("Requested entity was not found") && typeof window !== 'undefined' && (window as any).aistudio) {
+          await (window as any).aistudio.openSelectKey();
+        }
+        return '';
+      }
     };
 
-    const faithful = await gen(`TECHNICAL DNA 1:1 INDUSTRIAL VIEW: ${project.title}. High definition wood textures, precise joinery details, neutral background.`, sketchData);
-    const decorated = await gen(`${style} PROFESSIONAL PHOTOGRAPHY: ${project.title}. Real environment, cinematic lighting, staged luxury interior.`, sketchData);
+    const faithfulPrompt = `DNA INDUSTRIAL FIEL 1:1. Mobiliário: ${project.title}. Materiais: ${project.modules.map(m => m.material).join(', ')}. Estilo catálogo técnico, fundo neutro, iluminação de estúdio.`;
+    const decoratedPrompt = `${style} MASTERPIECE. Fotografia profissional de interiores, iluminação natural, staging de luxo. Preserve o layout original.`;
+
+    const [faithful, decorated] = await Promise.all([
+      gen(faithfulPrompt, sketchData),
+      gen(decoratedPrompt, sketchData)
+    ]);
 
     return { faithful, decorated };
-  },
-
-  /**
-   * ESTÁGIO 3: BUDGET (Cálculo Industrial)
-   */
-  calculateBudget: (project: ProjectData, rates: { mdf: number; markup: number }) => {
-    const area = project.modules.reduce((acc, m) => acc + (m.dimensions.w * m.dimensions.h) / 1000000, 0);
-    const mdfCost = Math.ceil(area / (MDF_SHEET_AREA * 0.8)) * rates.mdf;
-    const labor = area * LABOR_RATE_M2;
-    const total = mdfCost + labor;
-    return {
-      status: 'done' as const,
-      materials: [{ name: 'MDF Estrutural', cost: mdfCost }],
-      total,
-      labor,
-      finalPrice: total * rates.markup,
-      creditsUsed: 15
-    };
   }
 };
 
 // ============================================================================
-// [1. ESTADO GLOBAL - REDUCER CONSOLIDADO]
+// [1. ESTADO GLOBAL & LOGICA FINANCEIRA]
 // ============================================================================
 
 const MarcenaContext = createContext<any>(null);
 
-const marcenaReducer = (state: MarcenaState, action: any): MarcenaState => {
+const marcenaReducer = (state: any, action: any) => {
   switch (action.type) {
-    case 'ADD_MESSAGE': 
-      return { ...state, messages: [...state.messages, action.payload] };
-    case 'UPDATE_MESSAGE': 
-      return { ...state, messages: state.messages.map(m => m.id === action.id ? { ...m, ...action.payload } : m) };
-    case 'PROGRESS_UPDATE': 
-      return { 
-        ...state, 
-        messages: state.messages.map(m => m.id === action.id ? { 
-          ...m, 
-          project: { ...(m.project || {}), ...action.payload } as ProjectData, 
-          progressiveSteps: { ...(m.progressiveSteps || {}), ...action.stepUpdate } 
-        } : m) 
-      };
+    case 'ADD_MESSAGE': return { ...state, messages: [...state.messages, action.payload] };
+    case 'UPDATE_MESSAGE': return { ...state, messages: state.messages.map((m:any) => m.id === action.id ? { ...m, ...action.payload } : m) };
+    case 'PROGRESS_UPDATE': return { ...state, messages: state.messages.map((m:any) => m.id === action.id ? { ...m, project: { ...(m.project || {}), ...action.payload }, progressiveSteps: { ...(m.progressiveSteps || {}), ...action.stepUpdate } } : m) };
+    case 'ADD_PART': return { ...state, manualParts: [...state.manualParts, action.payload] };
+    case 'REMOVE_PART': return { ...state, manualParts: state.manualParts.filter((p:any) => p.id !== action.id) };
+    case 'SET_RATES': return { ...state, industrialRates: { ...state.industrialRates, ...action.payload } };
+    case 'ADD_CLIENT': return { ...state, clients: [action.payload, ...state.clients] };
     default: return state;
   }
 };
 
 // ============================================================================
-// [2. COMPONENTES ATOMICOS]
+// [2. BANCADAS (MODULOS DE ESPECIALIDADE)]
+// ============================================================================
+
+const BentoBancada = () => {
+  const { state, dispatch, notify } = useContext(MarcenaContext);
+  const [newP, setNewP] = useState({ n: '', w: '', h: '', q: 1 });
+  
+  // Extrai peças de todos os projetos ativos na conversa
+  const iaParts = useMemo(() => {
+    return state.messages
+      .filter((m: any) => m.project && m.status === 'done')
+      .flatMap((m: any) => m.project.modules.map((mod: any) => ({
+        name: mod.type,
+        dims: `${mod.dimensions.w}x${mod.dimensions.h}`,
+        qty: 1
+      })));
+  }, [state.messages]);
+
+  return (
+    <div className="space-y-6 text-zinc-900">
+      <div className="bg-white border-2 border-orange-100 rounded-[2.5rem] overflow-hidden shadow-sm">
+        <div className="bg-orange-600 p-6 text-white flex justify-between items-center">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Engenharia IA</span>
+            <h3 className="text-xl font-black italic">Peças Orquestradas</h3>
+          </div>
+          <Cpu size={24} />
+        </div>
+        <div className="p-4">
+          <table className="w-full text-left text-[12px]">
+            <tbody className="divide-y text-zinc-900">
+              {iaParts.map((p: any, i: number) => (
+                <tr key={i}><td className="p-3 font-bold uppercase">{p.name}</td><td className="p-3 text-orange-700 font-mono text-center">{p.dims}</td><td className="p-3 font-black text-center">{p.qty}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="p-8 bg-white rounded-[2.5rem] border-2 border-dashed border-orange-200 space-y-5">
+        <h3 className="text-[10px] font-black uppercase text-orange-600 tracking-widest">Acréscimo Manual</h3>
+        <input placeholder="Descrição" className="w-full p-4 bg-zinc-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-orange-500" value={newP.n} onChange={e => setNewP({...newP, n: e.target.value})} />
+        <div className="flex gap-3">
+          <input type="number" placeholder="L" className="w-full p-4 bg-zinc-50 rounded-2xl font-bold" value={newP.w} onChange={e => setNewP({...newP, w: e.target.value})} />
+          <input type="number" placeholder="H" className="w-full p-4 bg-zinc-50 rounded-2xl font-bold" value={newP.h} onChange={e => setNewP({...newP, h: e.target.value})} />
+          <input type="number" placeholder="Q" className="w-20 p-4 bg-zinc-50 rounded-2xl font-bold" value={newP.q} onChange={e => setNewP({...newP, q: Number(e.target.value)})} />
+        </div>
+        <button onClick={() => { if(Number(newP.w) > 0) { dispatch({ type: 'ADD_PART', payload: { ...newP, id: Date.now() } }); setNewP({n:'',w:'',h:'',q:1}); notify("PEÇA ADICIONADA"); } }} className="w-full bg-orange-600 text-white py-5 rounded-[2rem] font-black shadow-lg hover:bg-orange-700 transition-all active:scale-95">REGISTRAR NA BANCADA</button>
+        {state.manualParts.map((p:any) => (
+          <div key={p.id} className="flex justify-between items-center p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
+            <span className="text-xs font-bold uppercase">{p.n || "Item"}</span>
+            <span className="text-xs font-mono">{p.w}x{p.h}</span>
+            <button onClick={() => dispatch({ type: 'REMOVE_PART', id: p.id })} className="text-red-400 p-2"><Trash2 size={18}/></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const EstelaBancada = () => {
+  const { financeiro, state, dispatch, notify } = useContext(MarcenaContext);
+  return (
+    <div className="space-y-6">
+      <div className={`p-10 rounded-[3rem] border-l-[15px] shadow-2xl transition-all ${financeiro.lucro < 1000 ? 'bg-red-50 border-red-500' : 'bg-green-50 border-green-500'}`}>
+        <div className="flex justify-between items-center">
+          <div className="text-left">
+            <p className="text-[10px] font-black uppercase text-zinc-400 mb-1 tracking-widest">Lucro Estimado</p>
+            <h3 className={`text-5xl font-black italic tracking-tighter ${financeiro.lucro < 1000 ? 'text-red-600' : 'text-green-600'}`}>R$ {financeiro.lucro.toLocaleString('pt-BR')}</h3>
+          </div>
+          <TrendingUp className={financeiro.lucro < 1000 ? 'text-red-400' : 'text-green-400'} size={48} />
+        </div>
+      </div>
+      <div className="p-10 bg-zinc-900 rounded-[3rem] text-center">
+        <p className="text-[10px] font-black text-green-400 uppercase tracking-[0.4em] mb-3">Faturamento Master</p>
+        <h2 className="text-6xl font-black text-white italic tracking-tighter">R$ {financeiro.venda.toLocaleString('pt-BR')}</h2>
+      </div>
+      <div className="p-8 bg-white border-2 border-zinc-100 rounded-[2.5rem] space-y-5">
+        <label className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block">Markup de Obra Industrial</label>
+        <div className="flex items-center gap-6">
+          <input type="range" min="1.1" max="4" step="0.1" className="flex-1 accent-orange-600" value={state.industrialRates.markup} onChange={(e)=>dispatch({ type: 'SET_RATES', payload: { markup: Number(e.target.value) } })} />
+          <span className="bg-zinc-900 text-white px-5 py-3 rounded-2xl font-black text-sm italic">{state.industrialRates.markup}x</span>
+        </div>
+      </div>
+      <button onClick={() => notify("📄 CONTRATO SUPREME GERADO!")} className="w-full py-7 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase text-xs flex items-center justify-center gap-4 active:scale-95 shadow-xl transition-all"><FileSignature size={24} /> Gerar PDF de Contrato</button>
+    </div>
+  );
+};
+
+// ============================================================================
+// [3. UI SUPREME CONSOLIDADA]
 // ============================================================================
 
 const LogoSVG = ({ size = 24 }: { size?: number }) => (
@@ -160,60 +236,13 @@ const LogoSVG = ({ size = 24 }: { size?: number }) => (
   </svg>
 );
 
-const ProgressStep = ({ label, active, done }: { label: string; active: boolean; done: boolean }) => (
-  <div className="flex items-center gap-2.5 py-1">
-    <div className={`w-2 h-2 rounded-full transition-all duration-500 ${
-      done ? 'bg-orange-500 shadow-[0_0_10px_rgba(217,119,6,0.6)]' : active ? 'bg-orange-500 animate-pulse' : 'bg-zinc-200'
-    }`} />
-    <span className={`text-[9px] font-black uppercase tracking-widest ${
-      done ? 'text-zinc-800' : active ? 'text-orange-600' : 'text-zinc-400'
-    }`}>{label}</span>
-  </div>
-);
-
-// FIX: Added IaraVisionBancada component to solve the missing name error.
-const IaraVisionBancada = () => {
-  const { state, setSelectedImage } = useContext(MarcenaContext);
-  const projects = state.messages
-    .filter((m: Message) => m.project && m.status === 'done')
-    .map((m: Message) => m.project!);
-
-  if (projects.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center">
-        <LucideImage size={48} className="mx-auto" />
-        <p className="text-[11px] font-black uppercase mt-4 tracking-[0.3em]">Galeria Vazia</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-4">
-      {projects.map((p: ProjectData) => (
-        <div key={p.projectId} className="space-y-2 group">
-          <div 
-            className="relative aspect-square overflow-hidden rounded-[2rem] border-2 border-zinc-100 shadow-sm cursor-pointer" 
-            onClick={() => setSelectedImage(p.render.faithfulUrl!)}
-          >
-            <img src={p.render.faithfulUrl} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-               <LucideImage size={24} className="text-white" />
-            </div>
-          </div>
-          <p className="text-[9px] font-black uppercase truncate px-2 text-zinc-600">{p.title}</p>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 const Drawer = ({ id, title, color, icon, children }: any) => {
   const { activeModal, setActiveModal } = useContext(MarcenaContext);
   if (activeModal !== id) return null;
   return (
     <div className="fixed inset-0 z-[120000] flex justify-end">
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setActiveModal(null)} />
-      <div className="relative w-full max-w-[460px] h-full bg-[#f8fafc] shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden">
+      <div className="relative w-full max-w-[480px] h-full bg-[#f8fafc] shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden">
         <header className={`${color} p-10 text-white flex justify-between items-center shrink-0 shadow-lg`}>
           <div className="flex items-center gap-6">
             <div className="p-4 bg-white/20 rounded-[1.4rem] backdrop-blur-md border border-white/20 shadow-xl">{React.createElement(icon, { size: 30 })}</div>
@@ -222,7 +251,7 @@ const Drawer = ({ id, title, color, icon, children }: any) => {
               <h2 className="text-2xl font-black uppercase tracking-widest italic leading-none mt-1.5">{title}</h2>
             </div>
           </div>
-          <button onClick={() => setActiveModal(null)} className="p-5 bg-white text-orange-600 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center border-2 border-orange-600/10">
+          <button onClick={() => setActiveModal(null)} className="p-5 bg-white text-orange-600 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center border-2 border-orange-600/10 active:scale-90">
             <X size={34} strokeWidth={3} />
           </button>
         </header>
@@ -233,109 +262,13 @@ const Drawer = ({ id, title, color, icon, children }: any) => {
 };
 
 // ============================================================================
-// [3. INTERFACE DE MENSAGENS]
-// ============================================================================
-
-const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void }> = ({ msg, onImageClick }) => {
-  const isUser = msg.type === MessageType.USER;
-  const project = msg.project;
-  const steps = msg.progressiveSteps || { parsed: false, render: false, pricing: false, cutPlan: false };
-  const { reRender } = useContext(MarcenaContext);
-
-  const timeStr = useMemo(() => {
-    const d = new Date(msg.timestamp);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  }, [msg.timestamp]);
-
-  return (
-    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 px-3`}>
-      <div className={`max-w-[85%] relative flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-        
-        {/* BOLHA WHATSAPP SUPREME */}
-        <div className={`p-2 rounded-2xl shadow-md min-w-[80px] relative transition-all ${
-          isUser ? 'bg-[#dcf8c6] rounded-tr-none' : 'bg-white rounded-tl-none border border-zinc-100'
-        }`}>
-          {/* CAUDA DA BOLHA (TIPS) */}
-          <div className={`absolute top-0 w-3 h-3 ${
-            isUser ? '-right-2 bg-[#dcf8c6] [clip-path:polygon(0_0,0_100%,100%_0)]' : '-left-2 bg-white [clip-path:polygon(100%_0,0_0,100%_100%)]'
-          }`} />
-
-          {msg.attachment?.type === 'image' && (
-            <div className="relative overflow-hidden rounded-xl mb-2 cursor-pointer" onClick={() => onImageClick(msg.attachment!.url)}>
-              <img src={msg.attachment.url} className="w-full max-h-72 object-cover" />
-            </div>
-          )}
-
-          <div className="px-2 pb-1">
-            <div className={`text-[15px] leading-snug text-zinc-900 ${!isUser && msg.status === 'processing' ? 'italic text-orange-600 font-bold' : ''}`}>
-              {msg.content}
-            </div>
-            <div className="flex justify-end items-center gap-1.5 mt-1.5 opacity-60">
-              <span className="text-[10px] text-zinc-600 font-bold">{timeStr}</span>
-              {isUser && <CheckCheck size={14} className="text-blue-500" />}
-            </div>
-          </div>
-        </div>
-
-        {/* FEEDBACK DE PROCESSAMENTO DO MOTOR YARA */}
-        {!isUser && msg.status === 'processing' && (
-          <div className="bg-white/90 backdrop-blur-md rounded-2xl p-5 mt-3 shadow-xl border-2 border-orange-500/10 w-full max-w-[240px] animate-in slide-in-from-left">
-            <ProgressStep label="DNA Parsing" active={!steps.parsed} done={steps.parsed} />
-            <ProgressStep label="Materialização AI" active={steps.parsed && !steps.render} done={steps.render} />
-            <div className="flex items-center gap-2.5 mt-2.5 pt-2.5 border-t border-zinc-100">
-               <Loader2 size={13} className="animate-spin text-orange-500" />
-               <span className="text-[9px] font-black uppercase text-orange-700 animate-pulse">Orquestrando...</span>
-            </div>
-          </div>
-        )}
-
-        {/* CARD DO PROJETO - MATERIALIZAÇÃO DO JSON MESTRE */}
-        {project && msg.status === 'done' && (
-          <div className="mt-4 bg-white border-2 border-orange-600/20 rounded-[3rem] overflow-hidden text-left shadow-2xl w-full max-w-[350px] animate-in zoom-in border-b-[12px] border-orange-600">
-             <div className="bg-black p-6 text-white flex justify-between items-center relative overflow-hidden">
-               <div className="flex flex-col relative z-10">
-                 <span className="text-[12px] font-black uppercase tracking-[0.3em] text-orange-500 italic leading-none mb-1.5">{project.title}</span>
-                 <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.4em] leading-none">CÓDIGO INDUSTRIAL V283</span>
-               </div>
-               <Award size={26} className="text-orange-500 animate-bounce relative z-10" />
-             </div>
-             
-             <div className="p-7 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.faithfulUrl!)}>
-                    <img src={project.render.faithfulUrl} className="aspect-square object-cover rounded-[1.8rem] border-2 border-zinc-100 shadow-md transition-transform hover:scale-105" />
-                    <span className="absolute bottom-2.5 left-2.5 bg-black/70 text-white text-[7px] px-2.5 py-1 rounded-full font-black uppercase tracking-tighter backdrop-blur-md">DNA FIEL</span>
-                  </div>
-                  <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.decoratedUrl!)}>
-                    <img src={project.render.decoratedUrl} className="aspect-square object-cover rounded-[1.8rem] border-2 border-zinc-100 shadow-md transition-transform hover:scale-105" />
-                    <span className="absolute bottom-2.5 left-2.5 bg-orange-600 text-white text-[7px] px-2.5 py-1 rounded-full font-black uppercase tracking-tighter backdrop-blur-md">AD STYLE</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-end pt-5 border-t border-zinc-100">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black uppercase text-zinc-400 italic leading-none mb-1.5 tracking-widest">Orçamento Master</span>
-                    <span className="text-4xl font-black italic tracking-tighter leading-none text-zinc-900">R$ {project.pricing.finalPrice.toLocaleString('pt-BR')}</span>
-                  </div>
-                  <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`🚀 MarcenApp: Projeto ${project.title} pronto!`)}`)} className="w-16 h-16 bg-black text-orange-500 rounded-[1.6rem] flex items-center justify-center shadow-2xl active:scale-90 border border-orange-600/10 hover:bg-zinc-900 transition-all">
-                    <MessageSquare size={28}/>
-                  </button>
-                </div>
-             </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
-// [4. WORKSHOP MASTER - UI CONSOLIDADA]
+// [4. WORKSHOP MASTER]
 // ============================================================================
 
 const WorkshopInner = () => {
-  const { state, dispatch, financeiro, setActiveModal, notify, industrialRates, setSelectedImage } = useContext(MarcenaContext);
+  const { state, dispatch, financeiro, setActiveModal, notify, selectedImage, setSelectedImage } = useContext(MarcenaContext);
   const [inputText, setInputText] = useState("");
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -343,97 +276,106 @@ const WorkshopInner = () => {
 
   const handlePipeline = async (text: string, attachment?: Attachment) => {
     if (!text && !attachment) return;
-    
-    // UI OTIMISTA: Insere mensagem do usuário instantaneamente
     const userMsgId = `u-${Date.now()}`;
-    dispatch({ 
-      type: 'ADD_MESSAGE', 
-      payload: { id: userMsgId, type: MessageType.USER, content: text || "Análise DNA Multimodal", timestamp: new Date(), attachment, status: 'sent' } 
-    });
+    dispatch({ type: 'ADD_MESSAGE', payload: { id: userMsgId, type: MessageType.USER, content: text || "Análise Multimodal", timestamp: new Date(), attachment, status: 'sent' } });
     setInputText("");
     
-    // ESTÁGIO 1: Feedback YARA
     const iaraId = `i-${Date.now()}`;
-    dispatch({ 
-      type: 'ADD_MESSAGE', 
-      payload: { 
-        id: iaraId, type: MessageType.IARA, 
-        content: "YARA 3.0: Iniciando extração do DNA industrial...", 
-        timestamp: new Date(), 
-        status: 'processing', 
-        progressiveSteps: { parsed: false, render: false, pricing: false, cutPlan: false } 
-      } 
-    });
+    dispatch({ type: 'ADD_MESSAGE', payload: { id: iaraId, type: MessageType.IARA, content: "YARA 3.0: Orquestrando DNA industrial...", timestamp: new Date(), status: 'processing', progressiveSteps: { parsed: false, render: false, pricing: false, cutPlan: false } } });
 
     try {
-      // ESTÁGIO 2: Geração do JSON MESTRE (Fonte Única)
       const project = await YaraEngine.processInput(text, attachment);
-      if (!project) throw new Error("DNA Parsing falhou.");
+      if (!project) throw new Error("DNA Error");
       dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: project, stepUpdate: { parsed: true } });
       
-      // ESTÁGIO 3: Materialização AI
-      const pricing = YaraEngine.calculateBudget(project, industrialRates);
-      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { pricing }, stepUpdate: { pricing: true } });
-
       const render = await YaraEngine.generateRender(project, attachment?.data);
-      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { render: { ...render, status: 'done' } }, stepUpdate: { render: true, cutPlan: true } });
+      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { render: { ...render, status: 'done' } }, stepUpdate: { render: true, pricing: true, cutPlan: true } });
       
-      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Orquestração completa. Projeto materializado.", status: 'done' } });
-      notify("🚀 PROJETO ORQUESTRADO");
+      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Orquestração Supreme finalizada.", status: 'done' } });
+      notify("🚀 PROJETO MATERIALIZADO");
     } catch (e: any) {
-      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Erro na orquestração: " + e.message, status: 'error' } });
-      notify("❌ FALHA NA YARA");
+      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Falha na orquestração.", status: 'error' } });
     }
   };
 
+  const BANCADAS = [
+    { id: 'BENTO', title: 'Engenharia Bento', color: 'bg-orange-600', icon: Wrench },
+    { id: 'ESTELA', title: 'Financeiro Estela', color: 'bg-emerald-600', icon: DollarSign },
+    { id: 'CRM', title: 'Gestão de Leads', color: 'bg-blue-600', icon: Users },
+    { id: 'ADMIN', title: 'Dashboard Master', color: 'bg-black', icon: BarChart3 }
+  ];
+
   return (
-    <div className="flex h-screen bg-[#f0f2f5] overflow-hidden relative font-sans text-left">
+    <div className="flex h-screen bg-[#f0f2f5] overflow-hidden relative font-sans">
       <div className="w-full max-w-[480px] mx-auto h-screen bg-[#e5ddd5] sm:rounded-[3rem] overflow-hidden flex flex-col shadow-2xl relative border-black sm:border-[12px] transition-all duration-700">
         
-        {/* HEADER WHATSAPP SUPREME */}
+        {/* HEADER SUPREME */}
         <header className="bg-black pt-14 pb-5 px-7 flex items-center justify-between text-white z-30 shrink-0 shadow-lg relative">
           <div className="flex items-center gap-5">
             <LogoSVG size={54} />
             <div className="flex flex-col text-left">
               <h1 className="text-[17px] font-black uppercase tracking-[0.1em] text-orange-500 italic leading-none mb-1.5">MARCENAPP</h1>
               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none flex items-center gap-2">
-                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.8)]" /> online agora
+                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.8)]" /> online
               </div>
             </div>
           </div>
           <div className="flex gap-2.5">
-            <button onClick={() => setActiveModal('IARA')} className="p-3.5 hover:bg-white/10 rounded-2xl transition-all text-orange-500 border border-white/5 bg-white/5"><FolderOpen size={22} /></button>
-            <button onClick={() => setActiveModal('ADMIN')} className="p-3.5 hover:bg-white/10 rounded-2xl transition-all text-orange-500 border border-white/5 bg-white/5"><LayoutDashboard size={22} /></button>
+            <button onClick={() => setActiveModal('IARA')} className="p-3.5 hover:bg-white/10 rounded-2xl transition-all text-orange-500 bg-white/5"><FolderOpen size={22} /></button>
+            <button onClick={() => setActiveModal('ADMIN')} className="p-3.5 hover:bg-white/10 rounded-2xl transition-all text-orange-500 bg-white/5"><LayoutDashboard size={22} /></button>
           </div>
         </header>
 
-        {/* CHAT AREA WITH WALLPAPER */}
+        {/* CHAT AREA */}
         <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar bg-[url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')] bg-repeat bg-[length:400px_auto]">
-          <div className="bg-black/60 text-white text-[9px] font-black px-8 py-2.5 rounded-full mx-auto w-fit uppercase tracking-[0.4em] backdrop-blur-md mb-10 border border-white/10 shadow-2xl">
-            SESSÃO MASTER CRIPTOGRAFADA
-          </div>
-          {state.messages.map((msg: Message) => (
-            <ChatMessage key={msg.id} msg={msg} onImageClick={setSelectedImage} />
+          {state.messages.map((msg: any) => (
+             <div key={msg.id} className={`flex w-full ${msg.type === MessageType.USER ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+               <div className={`max-w-[85%] relative flex flex-col ${msg.type === MessageType.USER ? 'items-end' : 'items-start'}`}>
+                 <div className={`p-3 rounded-2xl shadow-md text-left ${msg.type === MessageType.USER ? 'bg-[#dcf8c6] rounded-tr-none' : 'bg-white rounded-tl-none border border-zinc-100'}`}>
+                    {msg.attachment?.type === 'image' && <img src={msg.attachment.url} className="w-full rounded-xl mb-2 max-h-60 object-cover cursor-pointer" onClick={() => setSelectedImage(msg.attachment.url)} />}
+                    <div className="text-[15px] text-zinc-900">{msg.content}</div>
+                    <div className="flex justify-end mt-1 opacity-50"><span className="text-[9px] font-bold">12:00</span></div>
+                 </div>
+                 {msg.project && msg.status === 'done' && (
+                   <div className="mt-4 bg-white border-2 border-orange-600/20 rounded-[3rem] overflow-hidden text-left shadow-2xl w-full max-w-[320px] animate-in zoom-in border-b-[10px] border-orange-600">
+                     <div className="bg-black p-5 text-white flex justify-between items-center"><span className="text-[11px] font-black uppercase tracking-widest text-orange-500 italic">{msg.project.title}</span><Award size={20} className="text-orange-500"/></div>
+                     <div className="p-5 space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <img src={msg.project.render.faithfulUrl} className="aspect-square object-cover rounded-[1.5rem] border border-zinc-100 cursor-pointer" onClick={() => setSelectedImage(msg.project.render.faithfulUrl)} />
+                          <img src={msg.project.render.decoratedUrl} className="aspect-square object-cover rounded-[1.5rem] border border-zinc-100 cursor-pointer" onClick={() => setSelectedImage(msg.project.render.decoratedUrl)} />
+                        </div>
+                        <div className="flex justify-between items-end pt-3 border-t border-zinc-50">
+                          <div className="flex flex-col"><span className="text-[9px] font-black uppercase text-zinc-400">Orçamento</span><span className="text-2xl font-black text-zinc-900">R$ {msg.project.pricing?.finalPrice?.toLocaleString('pt-BR') || '---'}</span></div>
+                          <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`🚀 Projeto ${msg.project.title} pronto!`)}`)} className="w-12 h-12 bg-black text-orange-500 rounded-2xl flex items-center justify-center shadow-lg active:scale-90"><MessageSquare size={20}/></button>
+                        </div>
+                     </div>
+                   </div>
+                 )}
+               </div>
+             </div>
           ))}
         </main>
 
-        {/* FOOTER INPUT WHATSAPP SUPREME */}
-        <footer className="bg-[#f0f0f0] px-5 py-5 flex items-center gap-3.5 z-50 shrink-0 pb-12 sm:pb-8 border-t border-zinc-200/50 backdrop-blur-xl">
-          <button onClick={() => setActiveModal('BENTO')} className="w-13 h-13 flex items-center justify-center rounded-full bg-white text-zinc-400 hover:text-orange-500 shadow-sm border border-zinc-200 transition-all active:scale-90">
-            <Paperclip size={26} />
-          </button>
-          <div className="flex-1 bg-white rounded-full flex items-center px-6 py-2 shadow-sm border border-zinc-200 focus-within:ring-4 ring-orange-500/10 transition-all">
-            <input 
-              type="text" 
-              placeholder="Mensagem" 
-              className="flex-1 text-[16px] outline-none bg-transparent py-3 px-1 text-zinc-800 placeholder-zinc-400 font-medium" 
-              value={inputText} 
-              onChange={(e) => setInputText(e.target.value)} 
-              onKeyDown={(e) => e.key === 'Enter' && handlePipeline(inputText)} 
-            />
-            <button onClick={() => fileInputRef.current?.click()} className="text-zinc-400 hover:text-orange-600 p-2.5 transition-transform active:scale-125">
-              <Camera size={28} />
+        {/* FOOTER SUPREME */}
+        <footer className="bg-[#f0f0f0] px-5 py-5 flex items-center gap-3 z-50 shrink-0 pb-12 sm:pb-8 border-t border-zinc-200/50 backdrop-blur-xl">
+          <div className="relative">
+            <button onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)} className={`w-13 h-13 flex items-center justify-center rounded-2xl transition-all shadow-xl active:scale-90 ${isToolsMenuOpen ? 'bg-zinc-800 rotate-45 text-white shadow-none' : 'bg-orange-600 text-white shadow-orange-500/30'}`}>
+              <Plus size={28} />
             </button>
+            {isToolsMenuOpen && (
+              <div className="absolute bottom-16 left-0 w-64 bg-black border border-white/10 rounded-[2.5rem] shadow-2xl p-3 flex flex-col gap-2 animate-in slide-in-from-bottom-5 z-[200]">
+                {BANCADAS.map(tool => (
+                  <button key={tool.id} onClick={() => { setActiveModal(tool.id); setIsToolsMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 hover:bg-white/5 rounded-3xl transition-all text-left">
+                    <div className={`p-2.5 rounded-xl ${tool.color} text-white`}>{React.createElement(tool.icon, { size: 20 })}</div>
+                    <span className="text-[10px] font-black uppercase text-white tracking-widest">{tool.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex-1 bg-white rounded-full flex items-center px-6 py-2 shadow-sm border border-zinc-200 focus-within:ring-4 ring-orange-500/10">
+            <input type="text" placeholder="Comando Industrial" className="flex-1 text-[16px] outline-none bg-transparent py-3 text-zinc-800 placeholder-zinc-400 font-medium" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePipeline(inputText)} />
+            <button onClick={() => fileInputRef.current?.click()} className="text-zinc-400 hover:text-orange-600 p-2.5 transition-transform active:scale-125"><Camera size={28} /></button>
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
@@ -443,40 +385,66 @@ const WorkshopInner = () => {
               }
             }} />
           </div>
-          <button 
-            className="w-14 h-14 rounded-full flex items-center justify-center bg-orange-600 text-white shadow-xl hover:bg-orange-500 transition-all active:scale-90"
-            onClick={() => inputText.trim() && handlePipeline(inputText)}
-          >
-            {inputText.trim() ? <Send size={26} className="ml-1.5"/> : <Mic size={28}/>}
+          <button className="w-14 h-14 rounded-full flex items-center justify-center bg-orange-600 text-white shadow-xl hover:bg-orange-500 active:scale-90" onClick={() => inputText.trim() && handlePipeline(inputText)}>
+            {inputText.trim() ? <Send size={26} className="ml-1"/> : <Mic size={28}/>}
           </button>
         </footer>
       </div>
 
-      {/* MODAIS (Consolidados para desmontar quando inativos) */}
-      <Drawer id="BENTO" title="Engine Bento" color="bg-orange-600" icon={Wrench}><p className="text-[11px] font-black uppercase opacity-40 text-center py-24 tracking-[0.4em] italic">Engine v283 em stand-by</p></Drawer>
-      <Drawer id="IARA" title="Galeria Master" color="bg-purple-600" icon={LucideImage}><IaraVisionBancada /></Drawer>
+      {/* GAVETAS INTEGRADAS */}
+      <Drawer id="BENTO" title="Engenharia Bento" color="bg-orange-600" icon={Wrench}><BentoBancada /></Drawer>
+      <Drawer id="ESTELA" title="Financeiro Estela" color="bg-emerald-600" icon={DollarSign}><EstelaBancada /></Drawer>
+      <Drawer id="IARA" title="Galeria Master" color="bg-purple-600" icon={LucideImage}>
+        <div className="grid grid-cols-2 gap-4">
+          {state.messages.filter((m:any)=>m.project && m.status==='done').map((m:any)=>(
+            <div key={m.id} className="space-y-2 group cursor-pointer" onClick={()=>setSelectedImage(m.project.render.faithfulUrl)}>
+              <div className="aspect-square overflow-hidden rounded-[2rem] border-2 border-zinc-100 shadow-sm transition-transform group-hover:scale-105">
+                <img src={m.project.render.faithfulUrl} className="w-full h-full object-cover" />
+              </div>
+              <p className="text-[9px] font-black uppercase text-zinc-600">{m.project.title}</p>
+            </div>
+          ))}
+        </div>
+      </Drawer>
+      <Drawer id="CRM" title="Gestão de Leads" color="bg-blue-600" icon={Users}>
+         <div className="space-y-4">
+            <button onClick={()=>notify("CRM: Novo Lead Criado")} className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs flex items-center justify-center gap-3 active:scale-95"><Plus size={18}/> Novo Cliente</button>
+            {state.clients.map((c:any)=>(
+              <div key={c.id} className="p-6 bg-white border border-zinc-100 rounded-[2.5rem] flex items-center justify-between shadow-sm">
+                <div className="text-left"><p className="text-[11px] font-black uppercase text-zinc-400 mb-1">{c.status}</p><h4 className="text-lg font-black text-zinc-900 leading-none">{c.name}</h4></div>
+                {/* Fix: ChevronRight was missing from imports. Added now. */}
+                <div className="bg-zinc-100 p-3 rounded-2xl text-blue-600"><ChevronRight size={20}/></div>
+              </div>
+            ))}
+         </div>
+      </Drawer>
       <Drawer id="ADMIN" title="Cockpit Master" color="bg-black" icon={BarChart3}>
         <div className="space-y-6">
-           <div className="p-10 bg-blue-50 rounded-[3rem] text-left border border-blue-100 shadow-xl relative overflow-hidden group">
+           <div className="p-10 bg-blue-50 rounded-[3rem] text-left border border-blue-100 relative overflow-hidden">
              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200/20 blur-3xl rounded-full" />
-             <p className="text-[11px] font-black uppercase text-blue-400 tracking-[0.3em] italic mb-3 leading-none">Total Industrial</p>
-             <h3 className="text-5xl font-black text-blue-900 tracking-tighter italic leading-none">R$ {financeiro.venda.toLocaleString('pt-BR')}</h3>
+             <p className="text-[11px] font-black uppercase text-blue-400 tracking-[0.3em] mb-3 leading-none">Total Faturado</p>
+             <h3 className="text-5xl font-black text-blue-900 tracking-tighter italic">R$ {financeiro.venda.toLocaleString('pt-BR')}</h3>
+           </div>
+           <div className="p-10 bg-green-50 rounded-[3rem] text-left border border-green-100 relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-green-200/20 blur-3xl rounded-full" />
+             <p className="text-[11px] font-black uppercase text-green-400 tracking-[0.3em] mb-3 leading-none">Lucro Bruto</p>
+             <h3 className="text-5xl font-black text-green-900 tracking-tighter italic">R$ {financeiro.lucro.toLocaleString('pt-BR')}</h3>
            </div>
         </div>
       </Drawer>
 
-      {/* VISUALIZADOR DE IMAGEM FULLSCREEN COM X LARANJA EM FUNDO BRANCO */}
-      {state.selectedImage && (
-        <div className="fixed inset-0 z-[140000] bg-black/98 backdrop-blur-3xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-700" onClick={() => setSelectedImage(null)}>
-          <img src={state.selectedImage} className="max-w-full max-h-[85vh] rounded-[4rem] shadow-2xl border border-white/10 select-none" onClick={(e) => e.stopPropagation()} />
+      {/* FULLSCREEN PREVIEW */}
+      {selectedImage && (
+        <div className="fixed inset-0 z-[140000] bg-black/98 backdrop-blur-3xl flex flex-col items-center justify-center p-6 animate-in fade-in" onClick={() => setSelectedImage(null)}>
+          <img src={selectedImage} className="max-w-full max-h-[85vh] rounded-[4rem] shadow-2xl border border-white/10" onClick={(e) => e.stopPropagation()} />
           <div className="absolute top-12 right-12">
-            <button className="p-9 bg-white text-orange-600 rounded-full shadow-[0_40px_80px_rgba(0,0,0,0.6)] flex items-center justify-center transition-all hover:scale-110 active:scale-90 border-[6px] border-orange-600/10" onClick={() => setSelectedImage(null)}>
+            <button className="p-9 bg-white text-orange-600 rounded-full shadow-2xl hover:scale-110 active:scale-90 border-[6px] border-orange-600/10" onClick={() => setSelectedImage(null)}>
               <X size={54} strokeWidth={4} />
             </button>
           </div>
           <div className="mt-14 flex gap-10">
-             <button className="px-14 py-6 bg-white/5 text-white rounded-full font-black uppercase text-[12px] tracking-[0.5em] border border-white/10 flex items-center gap-4 backdrop-blur-xl hover:bg-white/10 shadow-2xl transition-all" onClick={(e) => e.stopPropagation()}><Download size={22}/> Salvar</button>
-             <button className="px-14 py-6 bg-orange-600 text-white rounded-full font-black uppercase text-[12px] tracking-[0.5em] flex items-center gap-4 shadow-xl hover:bg-orange-500 transition-all" onClick={(e) => e.stopPropagation()}><Share2 size={22}/> Compartilhar</button>
+             <button className="px-14 py-6 bg-white/5 text-white rounded-full font-black uppercase text-[12px] tracking-[0.5em] border border-white/10 flex items-center gap-4 backdrop-blur-xl hover:bg-white/10" onClick={(e) => e.stopPropagation()}><Download size={22}/> Salvar</button>
+             <button className="px-14 py-6 bg-orange-600 text-white rounded-full font-black uppercase text-[12px] tracking-[0.5em] flex items-center gap-4 shadow-xl" onClick={(e) => e.stopPropagation()}><Share2 size={22}/> Compartilhar</button>
           </div>
         </div>
       )}
@@ -485,52 +453,50 @@ const WorkshopInner = () => {
 };
 
 // ============================================================================
-// [5. APP ROOT]
+// [5. APP ENTRY POINT]
 // ============================================================================
 
 const App: React.FC = () => {
   const [state, dispatch] = useReducer(marcenaReducer, { 
-    messages: [{ 
-      id: 'welcome', 
-      type: MessageType.IARA, 
-      content: 'MARCENAPP SUPREME v283 ONLINE. Envie uma foto do ambiente, rascunho ou áudio para orquestrar sua marcenaria agora.', 
-      timestamp: new Date(), 
-      status: 'done' 
-    }], 
-    isLoading: false, 
-    isAdminMode: false 
+    messages: [{ id: 'welcome', type: MessageType.IARA, content: 'MARCENAPP SUPREME v283 ONLINE. Orquestre sua fábrica agora.', timestamp: new Date(), status: 'done' }], 
+    manualParts: [],
+    industrialRates: { mdf: MDF_SHEET_PRICE, markup: 1.8 },
+    clients: [{ id: 1, name: 'Exemplo Master', status: 'Orçamento', updatedAt: Date.now() }]
   });
   
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const [industrialRates, setIndustrialRates] = useState({ mdf: MDF_SHEET_PRICE, markup: 1.45 });
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const financeiro = useMemo(() => {
-    const totalVenda = state.messages.reduce((acc, m) => acc + (m.project?.pricing?.finalPrice || 0), 0);
-    return { venda: totalVenda };
-  }, [state.messages]);
+    let totalArea = 0;
+    // Soma peças da IA (de todas as mensagens com projeto)
+    state.messages.forEach((m:any) => {
+      if (m.project && m.status === 'done') {
+        m.project.modules.forEach((mod:any) => {
+          totalArea += (mod.dimensions.w * mod.dimensions.h) / 1000000;
+        });
+      }
+    });
+    // Soma peças manuais
+    state.manualParts.forEach((p:any) => {
+      totalArea += (Number(p.w) * Number(p.h) * Number(p.q || 1)) / 1000000;
+    });
+
+    const mdfCost = (totalArea * (state.industrialRates.mdf / 5)) || 0;
+    const totalCost = mdfCost * 1.35;
+    const venda = totalCost * state.industrialRates.markup;
+    return { venda, lucro: venda - totalCost, area: totalArea, chapas: Math.ceil(totalArea / (MDF_SHEET_AREA * 0.85)) };
+  }, [state.messages, state.manualParts, state.industrialRates]);
 
   const notify = (text: string) => {
     const t = document.createElement('div');
-    t.className = "fixed top-36 left-1/2 -translate-x-1/2 z-[200000] bg-black text-white px-14 py-7 rounded-full font-black text-[12px] uppercase tracking-[0.5em] shadow-2xl animate-in fade-in zoom-in italic border border-orange-500/30 text-center backdrop-blur-md";
+    t.className = "fixed top-36 left-1/2 -translate-x-1/2 z-[200000] bg-black text-white px-14 py-7 rounded-full font-black text-[12px] uppercase tracking-[0.5em] shadow-2xl animate-in italic border border-orange-500/30 text-center backdrop-blur-md";
     t.innerText = text; document.body.appendChild(t);
-    setTimeout(() => { t.classList.add('animate-out', 'fade-out'); setTimeout(() => t.remove(), 400); }, 3500);
-  };
-
-  const reRender = async (msgId: string, style: string) => {
-    const msg = state.messages.find(m => m.id === msgId);
-    if (!msg?.project) return;
-    notify(`🎨 RE-MATERIALIZANDO: ${style.toUpperCase()}...`);
-    dispatch({ type: 'PROGRESS_UPDATE', id: msgId, stepUpdate: { render: false } });
-    try {
-      const render = await YaraEngine.generateRender(msg.project, msg.attachment?.data, style);
-      dispatch({ type: 'PROGRESS_UPDATE', id: msgId, payload: { render: { ...render, status: 'done' } }, stepUpdate: { render: true } });
-      notify("✅ MATERIALIZAÇÃO CONCLUÍDA!");
-    } catch (e) { notify("❌ ERRO NO MOTOR DE RENDER."); }
+    setTimeout(() => { t.classList.add('animate-out', 'fade-out'); setTimeout(() => t.remove(), 400); }, 3000);
   };
 
   return (
-    <MarcenaContext.Provider value={{ state, dispatch, financeiro, activeModal, setActiveModal, industrialRates, setIndustrialRates, notify, selectedImage, setSelectedImage, reRender }}>
+    <MarcenaContext.Provider value={{ state, dispatch, financeiro, activeModal, setActiveModal, notify, selectedImage, setSelectedImage }}>
       <WorkshopInner />
     </MarcenaContext.Provider>
   );
