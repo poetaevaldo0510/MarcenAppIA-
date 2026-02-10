@@ -11,63 +11,68 @@ export interface Attachment {
   data?: string; // base64
 }
 
+export interface Module {
+  id: string;
+  type: string;
+  dimensions: { w: number; h: number; d: number };
+  material: string;
+  finish: string;
+}
+
+export interface ProjectData {
+  projectId: string;
+  source: {
+    type: 'text' | 'voice' | 'image' | 'sketch2d' | 'hybrid';
+    content?: string;
+    attachmentUrl?: string;
+  };
+  title: string;
+  description: string;
+  environment: {
+    width: number;
+    height: number;
+    depth: number;
+  };
+  modules: Module[];
+  render: {
+    status: 'pending' | 'processing' | 'done' | 'error';
+    faithfulUrl?: string;
+    decoratedUrl?: string;
+  };
+  pricing: {
+    status: 'pending' | 'processing' | 'done' | 'error';
+    materials: Array<{ name: string; cost: number }>;
+    total: number;
+    labor: number;
+    finalPrice: number;
+    creditsUsed: number;
+  };
+  cutPlan: {
+    status: 'pending' | 'processing' | 'done' | 'error';
+    boards: any[];
+    optimizationScore: number;
+  };
+  complexity: number;
+}
+
 export interface Message {
   id: string;
   type: MessageType;
   content: string;
   timestamp: Date;
   attachment?: Attachment;
-  projectData?: ProjectData;
-  budget?: BudgetResult;
-  cutPlan?: CutPlanResult;
-  isConfirmed?: boolean;
-}
-
-export interface Piece {
-  name: string;
-  width: number;
-  height: number;
-  quantity: number;
-  material: string;
-}
-
-export interface Hardware {
-  name: string;
-  quantity: number;
-  pricePerUnit: number;
-}
-
-export interface ProjectData {
-  title: string;
-  description: string;
-  dimensions: {
-    width: number;
-    height: number;
-    depth: number;
-  };
-  material: string;
-  color: string;
-  pieces: Piece[];
-  hardware: Hardware[];
-  renderUrl?: string;
-  decoratedRenderUrl?: string;
-}
-
-export interface BudgetResult {
-  mdfCost: number;
-  hardwareCost: number;
-  laborCost: number;
-  totalCost: number;
-  finalPrice: number;
-  margin: number;
-  details: {
-    sheetsNeeded: number;
-    totalAreaM2: number;
+  project?: ProjectData;
+  status: 'sent' | 'processing' | 'done' | 'error';
+  progressiveSteps?: {
+    parsed: boolean;
+    render: boolean;
+    pricing: boolean;
+    cutPlan: boolean;
   };
 }
 
-export interface CutPlanResult {
-  efficiency: number;
-  totalSheets: number;
-  piecesCount: number;
+export interface MarcenaState {
+  messages: Message[];
+  isLoading: boolean;
+  isAdminMode: boolean;
 }
