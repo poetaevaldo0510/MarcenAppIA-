@@ -9,7 +9,7 @@ import {
   Image as LucideImage, Camera, Send, Trash2, AlertTriangle, BarChart3,
   Plus, Search, Filter, ClipboardList, Hammer, Zap, UserPlus,
   ChevronRight, Smartphone, LayoutDashboard, MessageSquare, Download, Share2,
-  LayoutGrid, FlipHorizontal
+  LayoutGrid, FlipHorizontal, Settings
 } from 'lucide-react';
 
 import { 
@@ -190,12 +190,16 @@ const RenderEngine = {
 // [3. COMPONENTES DE INTERFACE SUPREME]
 // ============================================================================
 
-const LogoSVG = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-    <rect width="100" height="100" rx="20" fill="#09090b" />
-    <path d="M25 75V25H45L50 40L55 25H75V75H62V40L50 65L38 40V75H25Z" fill="white" />
-    <circle cx="50" cy="15" r="4" fill="#D97706" />
-  </svg>
+const LogoSVG = ({ size = 24, className = "" }) => (
+  <div className={`relative flex items-center justify-center shrink-0 ${className}`} style={{ width: size, height: size }}>
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-xl overflow-visible">
+      <rect width="100" height="100" rx="24" fill="#09090b" />
+      <path d="M30 70V30H45L50 40L55 30H70V70H60V45L50 60L40 45V70H30Z" fill="white" />
+      <path d="M15 15L35 15" stroke="#D97706" strokeWidth="6" strokeLinecap="round" />
+      <path d="M65 85L85 85" stroke="#D97706" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="50" cy="85" r="4" fill="#D97706" />
+    </svg>
+  </div>
 );
 
 const BrandHeading = ({ title, subtitle }: { title: string; subtitle?: string }) => (
@@ -263,15 +267,20 @@ const BentoBancada = () => {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.2em] px-2">Engenharia IA (DNA Extraído)</h3>
+        <h3 className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.2em] px-2 flex items-center gap-2">
+           <LogoSVG size={16} /> Engenharia IA (DNA Extraído)
+        </h3>
         {state.messages.filter(m => m.project).map((msg, idx) => (
           <div key={idx} className="bg-white border-2 rounded-[2.5rem] overflow-hidden shadow-sm">
              <div className="bg-zinc-900 p-6 text-white flex justify-between items-center">
-               <BrandHeading title={msg.project!.title} subtitle="Lista de Corte Industrial" />
+               <div className="flex items-center gap-3">
+                 <LogoSVG size={32} />
+                 <BrandHeading title={msg.project!.title} subtitle="Lista de Corte Industrial" />
+               </div>
                <Cpu size={20} className="text-amber-500" />
              </div>
-             <div className="p-4">
-               <table className="w-full text-left text-[11px]">
+             <div className="p-4 overflow-x-auto">
+               <table className="w-full text-left text-[11px] min-w-[300px]">
                  <thead>
                    <tr className="text-zinc-400 font-black uppercase text-[9px] border-b">
                      <th className="pb-3 px-2">Componente</th>
@@ -345,6 +354,7 @@ const EstelaBancada = () => {
       </div>
 
       <div className="p-10 bg-zinc-900 rounded-[3rem] text-center shadow-2xl relative overflow-hidden group">
+        <div className="absolute top-0 left-0 p-4 opacity-10"><LogoSVG size={120} /></div>
         <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity"><DollarSign size={80} className="text-white"/></div>
         <p className="text-[10px] font-black text-green-400 uppercase tracking-[0.3em] mb-3">Total do Orçamento Industrial</p>
         <h2 className="text-5xl font-black text-white italic tracking-tighter">R$ {financeiro.venda.toLocaleString('pt-BR')}</h2>
@@ -400,7 +410,9 @@ const JucaBancada = () => {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.2em] px-2">Pipeline de Produção Juca</h3>
+        <h3 className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.2em] px-2 flex items-center gap-2">
+          <HardHat size={16} /> Pipeline de Produção Juca
+        </h3>
         <div className="space-y-3">
           {tasks.map((t, i) => (
             <div key={i} className="bg-white p-6 rounded-[1.8rem] border flex items-center justify-between shadow-sm group hover:border-blue-200 transition-all">
@@ -534,7 +546,7 @@ const CameraModal: React.FC<{ isOpen: boolean; onClose: () => void; onCapture: (
 
   return (
     <div className="fixed inset-0 z-[120000] bg-black flex flex-col items-center justify-center p-4">
-      <div className="relative w-full max-w-lg aspect-[3/4] bg-zinc-900 rounded-[3rem] overflow-hidden shadow-2xl">
+      <div className="relative w-full max-w-lg aspect-[3/4] bg-zinc-900 rounded-[3rem] overflow-hidden shadow-2xl border border-white/10">
         <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
         
@@ -548,7 +560,7 @@ const CameraModal: React.FC<{ isOpen: boolean; onClose: () => void; onCapture: (
           <div className="w-12 h-12" />
         </div>
       </div>
-      <p className="mt-8 text-white/50 font-black uppercase text-[10px] tracking-[0.4em]">Posicione o rascunho ou ambiente</p>
+      <p className="mt-8 text-white/50 font-black uppercase text-[10px] tracking-[0.4em] text-center">Posicione o rascunho ou ambiente para o escaneamento YARA</p>
     </div>
   );
 };
@@ -563,6 +575,11 @@ const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void 
       <div className={`max-w-[90%] p-6 rounded-[2.5rem] shadow-sm text-[13px] leading-relaxed relative ${
         isUser ? 'bg-[#09090b] text-white rounded-tr-none' : 'bg-white border border-gray-100 text-zinc-800 rounded-tl-none shadow-[0_4px_20px_rgba(0,0,0,0.03)]'
       }`}>
+        {!isUser && (
+          <div className="absolute -left-3 -top-3">
+             <LogoSVG size={28} />
+          </div>
+        )}
         {msg.attachment?.type === 'image' && (
           <div className="relative mb-4 group overflow-hidden rounded-[1.8rem]">
             <img src={msg.attachment.url} className="w-full max-h-64 object-cover cursor-pointer shadow-md group-hover:scale-105 transition-all duration-700" onClick={() => onImageClick(msg.attachment.url)} alt="Attachment" />
@@ -571,12 +588,15 @@ const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void 
           </div>
         )}
         
-        <div className="text-left font-medium tracking-tight">{msg.content}</div>
+        <div className="text-left font-medium tracking-tight whitespace-pre-wrap">{msg.content}</div>
 
         {project && (
           <div className="mt-6 bg-[#fcfcfc] border border-zinc-100 rounded-[3rem] overflow-hidden shadow-inner text-zinc-900 text-left">
             <div className="bg-[#09090b] px-8 py-6 flex justify-between items-center text-white">
-              <BrandHeading title={project.title} subtitle="Renderização v283 Supreme" />
+              <div className="flex items-center gap-3">
+                <LogoSVG size={32} />
+                <BrandHeading title={project.title} subtitle="Renderização v283 Supreme" />
+              </div>
               <Award size={22} className="text-amber-500 animate-pulse" />
             </div>
             
@@ -702,7 +722,7 @@ const WorkshopInner = () => {
     { id: 'ESTELA', title: 'Financeiro Estela', color: 'bg-emerald-600', icon: DollarSign },
     { id: 'JUCA', title: 'Agenda Juca', color: 'bg-slate-700', icon: HardHat },
     { id: 'CRM', title: 'Gestão CRM Master', color: 'bg-blue-600', icon: Users },
-    { id: 'ADMIN', title: 'Painel Admin', color: 'bg-zinc-900', icon: BarChart3 }
+    { id: 'ADMIN', title: 'Painel Master Admin', color: 'bg-zinc-900', icon: BarChart3 }
   ];
 
   return (
@@ -766,7 +786,7 @@ const WorkshopInner = () => {
         <CameraModal 
           isOpen={isCameraOpen} 
           onClose={() => setIsCameraOpen(false)} 
-          onCapture={(data) => handlePipeline("Captura de câmera industrial.", { type: 'image', url: 'camera_capture.jpg', data })} 
+          onCapture={(data) => handlePipeline("Captura de câmera industrial para análise YARA.", { type: 'image', url: 'camera_capture.jpg', data })} 
         />
 
         {/* PORTAL DE BANCADAS */}
@@ -774,6 +794,10 @@ const WorkshopInner = () => {
           <div className="fixed inset-0 z-[100000] pointer-events-none">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-[6px] pointer-events-auto" onClick={() => setIsToolsMenuOpen(false)} />
             <div className="absolute bottom-32 left-1/2 -translate-x-1/2 w-[90%] max-w-[400px] bg-[#09090b] border border-white/10 rounded-[3.5rem] shadow-2xl p-6 flex flex-col gap-3 pointer-events-auto animate-in slide-in-from-bottom-20 duration-500">
+               <div className="flex justify-between items-center mb-4 px-2">
+                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.4em] flex items-center gap-2"><LogoSVG size={14} /> Cockpit Central</span>
+                  <X size={16} className="text-zinc-500 cursor-pointer" onClick={() => setIsToolsMenuOpen(false)} />
+               </div>
                {BANCADAS.map(tool => (
                  <button key={tool.id} onClick={() => { setActiveModal(tool.id); setIsToolsMenuOpen(false); }} className="w-full flex items-center gap-5 p-5 hover:bg-white/5 rounded-[1.8rem] transition-all text-left group">
                     <div className={`p-4 rounded-[1.2rem] ${tool.color} group-active:scale-90 transition-all shadow-xl`}>
@@ -782,6 +806,12 @@ const WorkshopInner = () => {
                     <span className="text-xs font-black uppercase text-white tracking-[0.2em]">{tool.title}</span>
                  </button>
                ))}
+               <button onClick={() => { if(confirm('Limpar histórico industrial?')) dispatch({type:'CLEAR_HISTORY'}); setIsToolsMenuOpen(false); }} className="w-full flex items-center gap-5 p-5 hover:bg-red-500/10 rounded-[1.8rem] transition-all text-left group">
+                  <div className="p-4 rounded-[1.2rem] bg-red-600 shadow-xl group-active:scale-90 transition-all">
+                    <Trash2 size={24} className="text-white" />
+                  </div>
+                  <span className="text-xs font-black uppercase text-red-500 tracking-[0.2em]">Limpar Histórico</span>
+               </button>
             </div>
           </div>
         )}
@@ -791,11 +821,27 @@ const WorkshopInner = () => {
       <Drawer id="ESTELA" title="Gestão Financeira Estela" color="bg-emerald-600" icon={DollarSign}><EstelaBancada /></Drawer>
       <Drawer id="IARA" title="Galeria IARA Vision" color="bg-purple-600" icon={LayoutGrid}><IaraVisionBancada /></Drawer>
       <Drawer id="JUCA" title="Agenda Juca" color="bg-slate-700" icon={HardHat}><JucaBancada /></Drawer>
-      <Drawer id="CRM" title="Gestão CRM" color="bg-blue-600" icon={Users}><CRMBancada /></Drawer>
-      <Drawer id="ADMIN" title="Admin Panel" color="bg-zinc-900" icon={BarChart3}>
+      <Drawer id="CRM" title="Gestão CRM Master" color="bg-blue-600" icon={Users}><CRMBancada /></Drawer>
+      <Drawer id="ADMIN" title="Master Performance Panel" color="bg-zinc-900" icon={BarChart3}>
         <div className="space-y-6">
-          <MetricCard label="Faturamento" value={`R$ ${financeiro.venda.toLocaleString('pt-BR')}`} icon={<Package size={24}/>} color="bg-blue-50" />
-          <MetricCard label="Rentabilidade" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={<TrendingUp size={24}/>} color="bg-green-50" highlight />
+          <div className="flex items-center gap-4 mb-8 bg-white/5 p-6 rounded-[2.5rem] border border-white/10">
+             <LogoSVG size={64} />
+             <div>
+                <h3 className="text-xl font-black text-white italic tracking-tighter">MarcenApp Supreme</h3>
+                <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Versão Industrial v283.4</p>
+             </div>
+          </div>
+          <MetricCard label="Faturamento Previsto" value={`R$ ${financeiro.venda.toLocaleString('pt-BR')}`} icon={<Package size={24}/>} color="bg-blue-50" />
+          <MetricCard label="Rentabilidade v283" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={<TrendingUp size={24}/>} color="bg-green-50" highlight />
+          
+          <div className="p-8 bg-zinc-100 rounded-[2.5rem] border space-y-4">
+             <div className="flex items-center gap-3 text-zinc-900">
+               <Smartphone size={20} />
+               <h4 className="text-xs font-black uppercase tracking-widest">Configurações PWA</h4>
+             </div>
+             <p className="text-[10px] text-zinc-500 font-bold uppercase leading-relaxed">Adicione à tela inicial para acesso instantâneo via WhatsApp ou Desktop.</p>
+             <button onClick={() => notify("📱 Siga as instruções do navegador para instalar")} className="w-full bg-zinc-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Instalar no Dispositivo</button>
+          </div>
         </div>
       </Drawer>
 
@@ -817,6 +863,13 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
+    // Registro de PWA e Carregamento de Histórico
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+
     const saved = localStorage.getItem('marcenapp_messages');
     if (saved) {
       try {
@@ -828,7 +881,7 @@ const App: React.FC = () => {
         type: 'SET_MESSAGES', 
         payload: [{ 
           id: 'welcome', type: MessageType.IARA, 
-          content: 'YARA 3.0: Cockpit Industrial Ativo. Motor de captura pronto.', 
+          content: 'Mestre, Cockpit v283 Supreme em prumo. YARA 3.0 restaurou seu histórico e atualizou o motor visual para o padrão Industrial.', 
           timestamp: new Date(), status: 'done' 
         }]
       });
@@ -842,7 +895,7 @@ const App: React.FC = () => {
 
   const notify = useCallback((text: string) => {
     const toast = document.createElement('div');
-    toast.className = "fixed top-20 left-1/2 -translate-x-1/2 z-[200000] bg-zinc-900 text-white px-10 py-5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl";
+    toast.className = "fixed top-20 left-1/2 -translate-x-1/2 z-[200000] bg-zinc-900 text-white px-10 py-5 rounded-full font-black text-[10px] uppercase tracking-widest shadow-2xl border border-white/10 text-center";
     toast.innerText = text;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
