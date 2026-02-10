@@ -8,7 +8,7 @@ import {
   CheckCircle, ArrowUpRight, Cpu, Menu, Award, PlayCircle, 
   Image as LucideImage, Camera, Send, Trash2, AlertTriangle, BarChart3,
   Plus, Search, Filter, ClipboardList, Hammer, Zap, UserPlus,
-  ChevronRight, Smartphone, LayoutDashboard, MessageSquare, Download, Share2, Loader2, Save, UploadCloud
+  ChevronRight, Smartphone, LayoutDashboard, MessageSquare, Download, Share2, Loader2
 } from 'lucide-react';
 
 import { 
@@ -31,7 +31,7 @@ import {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // ============================================================================
-// [0. UTILITÁRIOS - YARA PARSERS (REFINADO)]
+// [0. UTILITÁRIOS - YARA RUBI PARSERS]
 // ============================================================================
 
 const YaraParsers = {
@@ -40,50 +40,7 @@ const YaraParsers = {
     if (!jsonMatch) return null;
     try {
       const parsed = JSON.parse(jsonMatch[0]);
-      const projectData = parsed.project || parsed;
-      
-      if (projectData.modules) {
-        projectData.modules = projectData.modules.map((m: any) => {
-          const parseDim = (val: any) => {
-            const num = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
-            return isNaN(num) ? 0 : Math.abs(num);
-          };
-
-          const rawMaterial = String(m.material || '').toLowerCase();
-          const rawFinish = String(m.finish || '').toLowerCase();
-          
-          let detectedMaterial = 'MDF 18mm Branco TX';
-          let detectedFinish = 'Padrão Industrial';
-          let costMultiplier = 1.0;
-
-          if (rawMaterial.includes('freijó') || rawFinish.includes('freijó')) {
-            detectedMaterial = 'MDF 18mm Freijó Premium';
-            detectedFinish = rawFinish.includes('fosco') ? 'Verniz Fosco Acetinado' : 'Madeira Natural';
-            costMultiplier = 1.95; 
-          } else if (rawMaterial.includes('mdp') || rawMaterial.includes('bp')) {
-            detectedMaterial = 'MDP 18mm BP Texturizado';
-            detectedFinish = 'BP High-Wear Anti-Risco';
-            costMultiplier = 0.88; 
-          } else if (rawMaterial.includes('grafite') || rawMaterial.includes('carbono')) {
-            detectedMaterial = 'MDF 18mm Grafite Matt';
-            detectedFinish = 'Soft-Touch Anti-Digital';
-            costMultiplier = 1.50;
-          }
-
-          return {
-            ...m,
-            dimensions: { 
-              w: parseDim(m.dimensions?.w), 
-              h: parseDim(m.dimensions?.h), 
-              d: parseDim(m.dimensions?.d) 
-            },
-            material: detectedMaterial,
-            finish: detectedFinish,
-            costMultiplier
-          };
-        });
-      }
-      return { project: projectData };
+      return parsed.project || parsed;
     } catch (e) {
       return null;
     }
@@ -96,13 +53,13 @@ const YaraParsers = {
         contents: [{
           parts: [
             { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
-            { text: "Você é um mestre marceneiro. Transcreva o áudio tecnicamente em português (Brasil), focando em medidas (mm) e materiais. Retorne apenas o texto transcrito." }
+            { text: "Você é a YARA RUBI. Transcreva este áudio focando em medidas de marcenaria e materiais técnicos." }
           ]
         }]
       });
       return res.text || "";
     } catch (e) {
-      throw new Error("Erro no STT.");
+      throw new Error("Erro na escuta Rubi.");
     }
   },
 
@@ -112,252 +69,163 @@ const YaraParsers = {
 };
 
 // ============================================================================
-// [1. ENGINES INDUSTRIAIS (CORE SUPREME)]
+// [1. ENGINES DE PRODUÇÃO]
 // ============================================================================
 
 const PricingEngine = {
   calculate: (project: Partial<ProjectData>, industrialRates: { mdf: number; markup: number }) => {
     const modules = project.modules || [];
     const area = YaraParsers.calculateTotalArea(modules);
-    
-    const weightedMaterialCost = modules.reduce((acc, m: any) => {
-      const mArea = (m.dimensions.w * m.dimensions.h) / 1000000;
-      return acc + (mArea * industrialRates.mdf * (m.costMultiplier || 1.0));
-    }, 0);
-
-    const sheetsCost = Math.ceil(weightedMaterialCost / (MDF_SHEET_AREA * 0.82)) * industrialRates.mdf;
+    const weightedCost = modules.reduce((acc, m: any) => acc + ((m.dimensions.w * m.dimensions.h) / 1000000 * industrialRates.mdf), 0);
+    const materialCost = Math.ceil(weightedCost / (MDF_SHEET_AREA * 0.85)) * industrialRates.mdf;
     const labor = area * LABOR_RATE_M2;
-    const overhead = 1.35; 
-    
-    const directCost = (sheetsCost + labor) * overhead;
-    const taxRate = 0.12; // 12% Imposto
-    const costWithTax = directCost * (1 + taxRate);
-    const finalPrice = costWithTax * industrialRates.markup;
-    
-    return {
-      status: 'done' as const,
-      total: directCost,
-      labor,
-      taxAmount: costWithTax - directCost,
-      finalPrice: finalPrice,
-      materials: [{ name: 'MDF e Estruturais', cost: sheetsCost }],
-      creditsUsed: 25
-    };
-  }
-};
-
-const CNCOptimizer = {
-  optimize: async (project: Partial<ProjectData>) => {
-    const modules = project.modules || [];
-    const area = YaraParsers.calculateTotalArea(modules);
-    const MAX_W = 2750;
-    const MAX_H = 1840;
-    const oversized = modules.filter(m => m.dimensions.w > MAX_W || m.dimensions.h > MAX_H);
-    if (oversized.length > 0) throw new Error(`Peças excedem limite CNC (${MAX_W}x${MAX_H}mm).`);
-
-    const rawSheetsNeeded = area / (MDF_SHEET_AREA * 0.94); 
-    const sheetsNeeded = Math.max(1, Math.ceil(rawSheetsNeeded));
-    const efficiency = (area / (sheetsNeeded * MDF_SHEET_AREA)) * 100;
-    
-    return {
-      status: 'done' as const,
-      optimizationScore: Math.round(efficiency),
-      wastePercentage: 100 - Math.round(efficiency),
-      boards: Array.from({ length: sheetsNeeded }).map((_, i) => ({ 
-        id: i + 1, 
-        usage: (efficiency / 100) - (Math.random() * 0.04) 
-      }))
-    };
+    const finalPrice = (materialCost + labor) * 1.30 * 1.12 * industrialRates.markup;
+    return { status: 'done' as const, finalPrice, total: materialCost + labor };
   }
 };
 
 const RenderEngine = {
-  generate: async (project: Partial<ProjectData>, sketchData?: string, style: string = 'Architectural Digest Style') => {
+  generate: async (project: Partial<ProjectData>, sketchData?: string) => {
     const gen = async (prompt: string, ref?: string) => {
       const parts: any[] = [];
-      if (ref) parts.push({ inlineData: { mimeType: 'image/jpeg', data: ref } });
+      if (ref) {
+        parts.push({
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: ref
+          }
+        });
+      }
       parts.push({ text: prompt });
-      const res = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+      
+      const res = await ai.models.generateContent({ 
+        model: 'gemini-2.5-flash-image', 
         contents: [{ parts }],
-        config: { imageConfig: { aspectRatio: "1:1" } }
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          }
+        }
       });
+      
       const part = res.candidates?.[0]?.content?.parts.find(p => p.inlineData);
       return part ? `data:image/png;base64,${part.inlineData.data}` : '';
     };
 
-    const mat = project.modules?.[0]?.material || 'MDF Premium';
-    const fin = project.modules?.[0]?.finish || 'Natural';
+    // Prompt Refatorado: Fiel 1:1 baseado no rascunho
+    const faithfulPrompt = `ACT AS A SENIOR WOODWORKING ENGINEER. Materialize this EXACT sketch as a technical 3D CAD render. 
+      You MUST maintain 1:1 proportions, layout, and structural details from the provided reference image. 
+      Material: 18mm MDF with realistic grain. Lighting: Clean studio lighting with soft shadows. 
+      Background: Solid white. Perspective: Isometric or perspective as seen in the sketch. 
+      ENGINEERING ACCURACY IS CRITICAL. Do not invent parts, follow the sketch lines exactly.`;
 
-    const stylePrompts: Record<string, string> = {
-      'Industrial CAD': `INDUSTRIAL CAD TECHNICAL VIEW. ${project.title}. High detail joinery. White studio environment. ${mat}, ${fin}.`,
-      'Architectural Digest Style': `ARCHITECTURAL DIGEST INTERIOR PHOTOGRAPHY. ${project.title}. Luxury minimalist living room, cinematic lighting, ultra-realistic staging. ${mat}, ${fin}.`,
-      'Sketch Fiel': `WOODWORKING ARTISTIC SKETCH. Proportions 1:1 match. Realistic ${mat} texture applied to the original drawing.`
-    };
-
-    const faithfulPrompt = `WOODWORKING TECHNICAL 1:1. Proportions exact match. ${mat}. Precision view.`;
-    const selectedPrompt = stylePrompts[style] || stylePrompts['Architectural Digest Style'];
+    // Prompt Refatorado: Architectural Digest Style (Decorado)
+    const decoratedPrompt = `ACT AS A WORLD-CLASS ARCHITECTURAL PHOTOGRAPHER FOR ARCHITECTURAL DIGEST. 
+      Create a hyper-realistic, high-end interior photography of the custom furniture from the sketch. 
+      CONTEXT: Integrated into a luxury minimalist penthouse in São Paulo. 
+      LIGHTING: Natural, soft morning sunlight through large panoramic windows, creating subtle cinematic shadows and depth. 
+      COMPOSITION: Professional architectural wide-angle lens, low-angle perspective, balanced composition. 
+      STYLING: Impeccable minimalist decor, with deep RUBY RED (#e11d48) luxury accents in textiles or lighting to match the 'Yara Rubi' brand. 
+      QUALITY: 8k resolution, photorealistic textures (wood, stone, glass), sharp focus.`;
 
     const [faithful, decorated] = await Promise.all([
       gen(faithfulPrompt, sketchData),
-      gen(selectedPrompt, sketchData)
+      gen(decoratedPrompt, sketchData)
     ]);
-
+    
     return { status: 'done' as const, faithfulUrl: faithful, decoratedUrl: decorated };
   }
 };
 
-const YaraPipeline = {
-  parse: async (input: { text?: string; attachment?: Attachment }): Promise<Partial<ProjectData> | null> => {
-    const parts: any[] = [{ text: input.text || "Extraia o DNA industrial de marcenaria." }];
-    if (input.attachment?.data) parts.push({ inlineData: { mimeType: 'image/jpeg', data: input.attachment.data } });
-    const res = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ role: 'user', parts }],
-      config: { 
-        systemInstruction: IARA_SYSTEM_PROMPT, 
-        responseMimeType: "application/json" 
-      }
-    });
-    const data = YaraParsers.extractJSON(res.text || '');
-    if (!data) return null;
-    const ext = data.project || data;
-    return {
-      projectId: `PRJ-${Date.now()}`,
-      title: ext.title || "Projeto Orquestrado",
-      description: ext.description,
-      environment: ext.environment || { width: 0, height: 0, depth: 0 },
-      modules: ext.modules || [],
-      complexity: ext.complexity || 2,
-      source: { type: input.attachment ? 'image' : 'text', content: input.text },
-      render: { status: 'pending' },
-      pricing: { status: 'pending', materials: [], total: 0, labor: 0, finalPrice: 0, creditsUsed: 0 },
-      cutPlan: { status: 'pending', boards: [], optimizationScore: 0 }
-    };
-  }
-};
-
 // ============================================================================
-// [2. REDUCER & CONTEXTO]
+// [2. CORE STATE & CONTEXT]
 // ============================================================================
 
 const marcenaReducer = (state: MarcenaState, action: any): MarcenaState => {
   switch (action.type) {
-    case 'ADD_MESSAGE':
-      return { ...state, messages: [...state.messages, action.payload] };
-    case 'UPDATE_MESSAGE':
-      return { ...state, messages: state.messages.map(m => (m.id === action.id ? { ...m, ...action.payload } : m)) };
-    case 'LOAD_PROJECTS':
-      return { ...state, messages: action.payload };
-    case 'PROGRESS_UPDATE':
-      return {
-        ...state,
-        messages: state.messages.map(m => (m.id === action.id ? { 
-          ...m, 
-          project: { ...(m.project || {}), ...action.payload } as ProjectData,
-          progressiveSteps: { ...(m.progressiveSteps || {}), ...action.stepUpdate } as any
-        } : m))
-      };
-    default:
-      return state;
+    case 'ADD_MESSAGE': return { ...state, messages: [...state.messages, action.payload] };
+    case 'UPDATE_MESSAGE': return { ...state, messages: state.messages.map(m => (m.id === action.id ? { ...m, ...action.payload } : m)) };
+    case 'PROGRESS_UPDATE': return { ...state, messages: state.messages.map(m => (m.id === action.id ? { ...m, project: { ...(m.project || {}), ...action.payload } as ProjectData, progressiveSteps: { ...(m.progressiveSteps || {}), ...action.stepUpdate } as any } : m)) };
+    default: return state;
   }
 };
 
 const MarcenaContext = createContext<any>(null);
 
 // ============================================================================
-// [3. COMPONENTES DE UI]
+// [3. UI COMPONENTS - NOIR & RUBI]
 // ============================================================================
 
-const ProgressStep: React.FC<{ label: string; active: boolean; done: boolean; error?: boolean }> = ({ label, active, done, error }) => (
-  <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition-all duration-300 ${active ? 'bg-amber-50 border-amber-200 shadow-md scale-105' : 'bg-white border-zinc-100'}`}>
-    {active && !done && !error && <Loader2 size={12} className="animate-spin text-amber-500" />}
-    {done && <CheckCircle size={12} className="text-emerald-500" />}
-    {error && <AlertTriangle size={12} className="text-red-500" />}
-    {!active && !done && !error && <div className="w-2.5 h-2.5 rounded-full bg-zinc-200" />}
-    <span className={`text-[10px] font-black uppercase tracking-widest transition-all ${active ? 'text-amber-600 animate-pulse' : (done ? 'text-zinc-900' : 'text-zinc-400')}`}>
-      {label}
-    </span>
-  </div>
-);
-
-const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void }> = ({ msg, onImageClick }) => {
-  const isUser = msg.type === MessageType.USER;
-  const project = msg.project;
-  const steps = msg.progressiveSteps || { parsed: false, render: false, pricing: false, cutPlan: false };
-  const { reRender } = useContext(MarcenaContext);
+const QuickVisionRail = () => {
+  const { state, setSelectedImage } = useContext(MarcenaContext);
+  const gallery = state.messages
+    .filter((m: any) => m.project?.render?.status === 'done')
+    .flatMap((m: any) => [m.project.render.faithfulUrl, m.project.render.decoratedUrl])
+    .filter(Boolean).slice(-8).reverse();
 
   return (
-    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-3`}>
-      <div className={`max-w-[90%] p-6 rounded-[2.8rem] shadow-sm text-[13px] leading-relaxed relative ${
-        isUser ? 'bg-[#09090b] text-white rounded-tr-none' : 'bg-white border border-zinc-100 text-zinc-800 rounded-tl-none'
-      }`}>
-        {msg.attachment?.type === 'image' && (
-          <div className="relative mb-5 cursor-pointer overflow-hidden rounded-[2rem] shadow-lg" onClick={() => onImageClick(msg.attachment!.url)}>
-            <img src={msg.attachment.url} className="w-full max-h-72 object-cover hover:scale-105 transition-transform duration-1000" />
-            <div className="absolute top-4 left-4 bg-black/60 text-white text-[8px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-white/10 backdrop-blur-md">DNA ORIGEM</div>
-          </div>
-        )}
-        
-        <div className="text-left font-medium leading-relaxed">{msg.content}</div>
-
-        {!isUser && msg.status === 'processing' && (
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <ProgressStep label="DNA Parsing" active={!steps.parsed} done={steps.parsed} />
-            <ProgressStep label="Engine Render" active={steps.parsed && !steps.render} done={steps.render} />
-            <ProgressStep label="Pricing (12%+38%)" active={steps.render && !steps.pricing} done={steps.pricing} />
-            <ProgressStep label="Nesting CNC >94%" active={steps.pricing && !steps.cutPlan} done={steps.cutPlan} />
-          </div>
-        )}
-
-        {project && msg.status === 'done' && (
-          <div className="mt-6 bg-zinc-50 border border-zinc-100 rounded-[3rem] overflow-hidden text-zinc-900 text-left shadow-inner">
-            <div className="bg-[#09090b] px-10 py-6 flex justify-between items-center text-white border-b border-amber-600/20">
-              <div className="flex flex-col">
-                <h1 className="text-[11px] font-black uppercase tracking-[0.4em] text-amber-500 truncate mb-1 italic">{project.title}</h1>
-                <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">SUPREME v283 MASTER</p>
-              </div>
-              <Award size={24} className="text-amber-500 animate-pulse" />
+    <div className="bg-[#09090b] border-b border-red-600/30 flex items-center gap-4 p-4 overflow-x-auto custom-scrollbar shadow-[0_10px_30px_rgba(225,29,72,0.1)] sticky top-[92px] z-40">
+      <div className="flex flex-col shrink-0 border-r border-zinc-800 pr-4">
+        <span className="text-[8px] font-black text-red-600 uppercase tracking-widest leading-none">Vision</span>
+        <span className="text-[10px] font-black text-white uppercase italic">Galeria</span>
+      </div>
+      {gallery.length === 0 ? (
+        <div className="flex gap-4">
+          {[1,2,3].map(i => (
+            <div key={i} className="w-16 h-16 shrink-0 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center opacity-30">
+              <LucideImage size={20} className="text-zinc-600" />
             </div>
-            
-            <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.faithfulUrl!)}>
-                  <img src={project.render.faithfulUrl} className="w-full aspect-square object-cover rounded-[2rem] shadow-md border-2 border-white transition-all" />
-                  <span className="absolute bottom-3 left-3 bg-black/70 text-white text-[7px] px-2 py-1 rounded-full font-black uppercase tracking-tighter backdrop-blur-sm">DNA FIEL 1:1</span>
-                </div>
-                <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.decoratedUrl!)}>
-                  <img src={project.render.decoratedUrl} className="w-full aspect-square object-cover rounded-[2rem] shadow-md border-2 border-white transition-all" />
-                  <span className="absolute bottom-3 left-3 bg-amber-600/90 text-white text-[7px] px-2 py-1 rounded-full font-black uppercase tracking-tighter italic backdrop-blur-sm">AD SHOWROOM</span>
-                </div>
-              </div>
+          ))}
+          <span className="text-[8px] font-black text-zinc-700 uppercase self-center tracking-widest">Aguardando DNA...</span>
+        </div>
+      ) : (
+        gallery.map((img: string, i: number) => (
+          <button key={i} onClick={() => setSelectedImage(img)} className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden border-2 border-zinc-800 hover:border-red-600 active:scale-90 transition-all shadow-xl">
+            <img src={img} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" />
+          </button>
+        ))
+      )}
+      <div className="w-12 shrink-0" />
+    </div>
+  );
+};
 
-              <div className="flex flex-wrap gap-2 py-3 border-y border-zinc-200/50">
-                {['Industrial CAD', 'Architectural Digest Style', 'Sketch Fiel'].map(style => (
-                  <button 
-                    key={style}
-                    onClick={() => reRender(msg.id, style)}
-                    className="px-4 py-2 bg-white border border-zinc-200 rounded-full text-[8px] font-black uppercase tracking-[0.2em] hover:border-amber-500 hover:text-amber-600 transition-all active:scale-95 shadow-sm"
-                  >
-                    {style === 'Architectural Digest Style' ? 'AD Style' : style}
-                  </button>
-                ))}
+const ChatMessage = ({ msg, onImageClick }: any) => {
+  const isUser = msg.type === MessageType.USER;
+  const project = msg.project;
+
+  return (
+    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-3 duration-500`}>
+      <div className={`max-w-[85%] p-6 rounded-[2.5rem] shadow-2xl relative ${isUser ? 'bg-red-600 text-white rounded-tr-none font-bold' : 'bg-[#18181b] border border-zinc-800 text-zinc-200 rounded-tl-none'}`}>
+        {msg.attachment?.type === 'image' && (
+          <img src={msg.attachment.url} className="w-full rounded-[1.8rem] mb-4 border-2 border-red-600/20 cursor-pointer shadow-lg" onClick={() => onImageClick(msg.attachment.url)} />
+        )}
+        <div className="text-[14px] leading-relaxed">{msg.content}</div>
+        
+        {project && msg.status === 'done' && (
+          <div className="mt-6 bg-[#09090b] rounded-[2rem] overflow-hidden border border-zinc-800 shadow-inner">
+            <div className="bg-red-700 px-6 py-3 flex justify-between items-center text-white">
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] italic">{project.title}</span>
+              <Award size={14} className="animate-bounce" />
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-3 bg-[#09090b]">
+              <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.faithfulUrl)}>
+                <img src={project.render.faithfulUrl} className="rounded-2xl border border-zinc-800 group-hover:border-red-600 transition-all" />
+                <span className="absolute bottom-2 left-2 text-[7px] font-black uppercase bg-black/60 px-2 py-1 rounded text-white">DNA Fiel</span>
               </div>
-              
-              <div className="flex justify-between items-center pt-2">
-                <div className="text-left">
-                  <p className="text-[10px] font-black text-zinc-400 uppercase italic tracking-widest mb-1 leading-none">Venda Master Industrial</p>
-                  <p className="text-4xl font-black text-zinc-900 tracking-tighter leading-none italic">R$ {project.pricing.finalPrice?.toLocaleString('pt-BR')}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                   <div className="flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase italic">
-                      <Zap size={12}/> Nesting CNC {project.cutPlan.optimizationScore}%
-                   </div>
-                   <button onClick={() => window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(`🚀 MarcenApp Supreme: Projeto ${project.title} orquestrado!`)}`, '_blank')} className="w-14 h-14 bg-[#09090b] text-white rounded-[1.8rem] flex items-center justify-center shadow-2xl active:scale-90 border border-white/5 transition-all">
-                    <MessageSquare size={24} className="text-amber-500" />
-                   </button>
-                </div>
+              <div className="relative group cursor-pointer" onClick={() => onImageClick(project.render.decoratedUrl)}>
+                <img src={project.render.decoratedUrl} className="rounded-2xl border border-zinc-800 group-hover:border-red-600 transition-all" />
+                <span className="absolute bottom-2 left-2 text-[7px] font-black uppercase bg-red-600 px-2 py-1 rounded text-white italic">Rubi Style</span>
               </div>
+            </div>
+            <div className="p-5 flex justify-between items-end border-t border-zinc-800">
+               <div className="text-left">
+                  <p className="text-[8px] font-black text-red-500 uppercase tracking-widest italic mb-1">Venda Final</p>
+                  <p className="text-2xl font-black text-white italic tracking-tighter">R$ {project.pricing.finalPrice?.toLocaleString('pt-BR')}</p>
+               </div>
+               <button className="w-12 h-12 bg-zinc-800 text-red-600 rounded-2xl flex items-center justify-center hover:bg-red-600 hover:text-white transition-all shadow-xl">
+                 <MessageSquare size={20} />
+               </button>
             </div>
           </div>
         )}
@@ -367,11 +235,11 @@ const ChatMessage: React.FC<{ msg: Message; onImageClick: (url: string) => void 
 };
 
 // ============================================================================
-// [4. WORKSHOP MASTER INNER]
+// [4. WORKSHOP INNER - NOIR & RUBI]
 // ============================================================================
 
 const WorkshopInner = () => {
-  const { state, dispatch, financeiro, activeModal, setActiveModal, notify, industrialRates, setSelectedImage } = useContext(MarcenaContext);
+  const { state, dispatch, financeiro, activeModal, setActiveModal, notify, industrialRates, selectedImage, setSelectedImage } = useContext(MarcenaContext);
   const [inputText, setInputText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -383,155 +251,165 @@ const WorkshopInner = () => {
 
   const handlePipeline = async (text: string, attachment?: Attachment) => {
     if (!text && !attachment) return;
-    const userMsg: Message = { id: `u-${Date.now()}`, type: MessageType.USER, content: text || "Input multimodal orquestrado.", timestamp: new Date(), attachment, status: 'sent' };
-    dispatch({ type: 'ADD_MESSAGE', payload: userMsg });
+    const uId = `u-${Date.now()}`;
+    dispatch({ type: 'ADD_MESSAGE', payload: { id: uId, type: MessageType.USER, content: text || "DNA Digital enviado.", timestamp: new Date(), attachment, status: 'sent' } });
     setInputText("");
-    const iaraId = `i-${Date.now()}`;
-    dispatch({ 
-      type: 'ADD_MESSAGE', 
-      payload: { 
-        id: iaraId, type: MessageType.IARA, 
-        content: "YARA 3.0: Iniciando processamento v283 Supreme...", 
-        timestamp: new Date(), 
-        status: 'processing', 
-        progressiveSteps: { parsed: false, render: false, pricing: false, cutPlan: false } 
-      } 
-    });
+    const iId = `i-${Date.now()}`;
+    dispatch({ type: 'ADD_MESSAGE', payload: { id: iId, type: MessageType.IARA, content: "YARA RUBI: Materializando DNA industrial...", timestamp: new Date(), status: 'processing' } });
+
     try {
-      const parsed = await YaraPipeline.parse({ text, attachment });
-      if (!parsed) throw new Error("DNA Parsing falhou.");
-      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: parsed, stepUpdate: { parsed: true } });
+      const parts: any[] = [{ text: text || "Extraia DNA." }];
+      if (attachment?.data) parts.push({ inlineData: { mimeType: 'image/jpeg', data: attachment.data } });
+      const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: [{ parts }], config: { systemInstruction: IARA_SYSTEM_PROMPT, responseMimeType: "application/json" } });
+      const parsed = YaraParsers.extractJSON(res.text || '');
+      if (!parsed) throw new Error("DNA Inválido.");
 
-      const pricing = PricingEngine.calculate(parsed as ProjectData, industrialRates);
-      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { pricing }, stepUpdate: { pricing: true } });
+      const pricing = PricingEngine.calculate(parsed, industrialRates);
       
-      const cutPlan = await CNCOptimizer.optimize(parsed as ProjectData);
-      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { cutPlan }, stepUpdate: { cutPlan: true } });
-
-      const renderRes = await RenderEngine.generate(parsed as ProjectData, attachment?.data);
-      dispatch({ type: 'PROGRESS_UPDATE', id: iaraId, payload: { render: renderRes }, stepUpdate: { render: true } });
-
-      const finalProject = { ...parsed, render: renderRes, pricing, cutPlan };
-      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: "Engenharia Master concluída com sucesso.", project: finalProject, status: 'done' } });
-      notify("🚀 Orquestração Finalizada!");
+      // Passando o sketchData para o motor de renderização
+      const render = await RenderEngine.generate(parsed, attachment?.data);
+      
+      dispatch({ type: 'UPDATE_MESSAGE', id: iId, payload: { content: "Orquestração concluída. Projetos materializados em 3D Rubi Style.", project: { ...parsed, render, pricing, status: 'done' }, status: 'done' } });
+      notify("🚀 DNA Rubi Materializado!");
     } catch (e: any) {
-      dispatch({ type: 'UPDATE_MESSAGE', id: iaraId, payload: { content: e.message || "Erro crítico.", status: 'error' } });
+      dispatch({ type: 'UPDATE_MESSAGE', id: iId, payload: { content: "Erro na orquestração Rubi: " + e.message, status: 'error' } });
     }
   };
 
-  const startVoiceRecording = async () => {
+  const startVoice = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-      mediaRecorder.onstop = async () => {
+      const mr = new MediaRecorder(stream);
+      mediaRecorderRef.current = mr; audioChunksRef.current = [];
+      mr.ondataavailable = (e) => audioChunksRef.current.push(e.data);
+      mr.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
         const reader = new FileReader();
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(',')[1];
-          notify("🎙️ Transcrevendo DNA...");
+          notify("🎙️ Escutando...");
           try {
-            const transcription = await YaraParsers.parseVoice(base64);
-            if (transcription) {
-              notify(`✅ Comando: "${transcription}"`);
-              handlePipeline(transcription); 
-            }
-          } catch (err) {
-            notify("❌ Erro no STT.");
-          }
+            const trans = await YaraParsers.parseVoice(base64);
+            if (trans) handlePipeline(trans);
+          } catch (err) { notify("❌ Voz falhou."); }
         };
         reader.readAsDataURL(audioBlob);
       };
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      notify("❌ Permissão negada.");
-    }
+      mr.start(); setIsRecording(true);
+    } catch (err) { notify("❌ Sem Microfone."); }
   };
 
-  const stopVoiceRecording = () => { if (mediaRecorderRef.current) { mediaRecorderRef.current.stop(); setIsRecording(false); } };
-
-  const saveProjects = () => { 
-    localStorage.setItem('marcenapp_supreme_v283_v2', JSON.stringify(state.messages)); 
-    notify("💾 Projetos Salvos!"); 
-  };
-  
-  const loadProjects = () => { 
-    try {
-      const saved = localStorage.getItem('marcenapp_supreme_v283_v2'); 
-      if (saved) { 
-        dispatch({ type: 'LOAD_PROJECTS', payload: JSON.parse(saved) }); 
-        notify("📂 Projetos Restaurados!"); 
-      } else {
-        notify("⚠️ Nenhum registro encontrado.");
-      }
-    } catch (e) {
-      notify("❌ Falha ao carregar dados.");
-    }
-  };
+  const stopVoice = () => { if (mediaRecorderRef.current) { mediaRecorderRef.current.stop(); setIsRecording(false); } };
 
   return (
-    <div className="flex h-screen bg-[#f0f2f5] overflow-hidden relative font-sans text-left">
-      <div className="w-full max-w-[480px] mx-auto h-screen bg-white sm:rounded-[3.5rem] overflow-hidden flex flex-col shadow-2xl relative border-zinc-900 sm:border-[12px] ring-offset-4 ring-white/20">
-        <header className="bg-[#09090b] pt-14 pb-8 px-8 flex items-center justify-between text-white shadow-2xl z-30 shrink-0 border-b border-amber-600/10 backdrop-blur-md">
+    <div className="flex h-screen bg-[#09090b] overflow-hidden relative font-sans text-left selection:bg-red-600/30">
+      <div className="w-full max-w-[480px] mx-auto h-screen bg-[#09090b] sm:rounded-[3.5rem] overflow-hidden flex flex-col shadow-[0_0_100px_rgba(225,29,72,0.15)] relative border-zinc-800 sm:border-[12px]">
+        
+        {/* HEADER RUBI NOIR */}
+        <header className="bg-[#09090b] pt-14 pb-6 px-8 flex items-center justify-between text-white z-50 shrink-0 border-b border-red-900/40">
           <div className="flex items-center gap-5">
-            <LogoSVG size={44} />
-            <div className="flex flex-col">
-              <h1 className="text-[11px] font-black uppercase tracking-[0.4em] text-amber-500 italic leading-none mb-1">MARCENAPP SUPREME</h1>
-              <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none">v283 MASTER RECALL</p>
+            <div className="w-12 h-12 bg-red-600 rounded-[1.2rem] flex items-center justify-center shadow-[0_0_20px_rgba(225,29,72,0.4)]"><LogoSVG size={32} /></div>
+            <div>
+              <h1 className="text-[14px] font-black uppercase tracking-[0.4em] text-red-600 italic leading-none">YARA RUBI</h1>
+              <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest leading-none mt-1">Industrial Engine 3.0</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={saveProjects} className="p-3 bg-white/5 rounded-xl text-amber-500 hover:bg-white/10 transition-all border border-white/5 shadow-xl active:scale-90" title="Salvar Projetos"><Save size={18} /></button>
-            <button onClick={loadProjects} className="p-3 bg-white/5 rounded-xl text-amber-500 hover:bg-white/10 transition-all border border-white/5 shadow-xl active:scale-90" title="Carregar Projetos"><UploadCloud size={18} /></button>
-            <button onClick={() => setActiveModal('ADMIN')} className="p-3 bg-white/5 rounded-xl text-amber-500 hover:bg-white/10 transition-all border border-white/5 shadow-xl active:scale-90"><LayoutDashboard size={18} /></button>
-          </div>
+          <button onClick={() => setActiveModal('ADMIN')} className="w-12 h-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-red-600 border border-zinc-800 hover:bg-zinc-800 transition-all"><LayoutDashboard size={20} /></button>
         </header>
 
-        <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-12 bg-[#fdfdfd] custom-scrollbar pb-36">
-          {state.messages.map((msg: Message) => <ChatMessage key={msg.id} msg={msg} onImageClick={setSelectedImage} />)}
+        {/* GALERIA PERSISTENTE (VISION RAIL) - SEMPRE DISPONÍVEL */}
+        <QuickVisionRail />
+
+        {/* CHAT FEED NOIR */}
+        <main ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-10 bg-[#09090b] custom-scrollbar pb-40">
+          {state.messages.map((m: any) => <ChatMessage key={m.id} msg={m} onImageClick={setSelectedImage} />)}
         </main>
 
-        <footer className="bg-white/95 backdrop-blur-3xl px-5 py-5 border-t border-zinc-100 flex items-center gap-4 z-50 pb-9 sm:pb-7 shrink-0 shadow-2xl">
-          <button onClick={() => setActiveModal('TOOLS')} className="w-14 h-14 flex items-center justify-center rounded-[1.5rem] transition-all bg-amber-600 text-white shadow-amber-500/30 active:scale-90 hover:brightness-110">
-            <Plus size={30} />
-          </button>
-          <div className="flex-1 bg-zinc-100 rounded-[1.5rem] flex items-center px-5 py-3 border border-zinc-200 shadow-inner group focus-within:bg-white transition-all">
-            <input type="text" placeholder="Dite comando ou envie DNA..." className="w-full text-[14px] outline-none bg-transparent py-2 font-bold placeholder-zinc-400" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePipeline(inputText)} />
-            <button onClick={() => fileInputRef.current?.click()} className="text-zinc-400 hover:text-amber-600 p-2.5 transition-all"><Camera size={22} /></button>
-            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => handlePipeline("", { type: 'image', url: URL.createObjectURL(file), data: (ev.target?.result as string).split(',')[1] }); reader.readAsDataURL(file); } }} />
+        {/* CONTROLES RUBI (ALWAYS VISIBLE) */}
+        <footer className="bg-[#09090b]/80 backdrop-blur-3xl px-6 py-6 border-t border-red-900/30 flex flex-col gap-5 z-50 shrink-0 shadow-[0_-30px_60px_rgba(0,0,0,0.8)]">
+          <div className="flex items-center gap-4">
+            {/* BOTÃO CÂMERA (DNA VISUAL) - SEMPRE DISPONÍVEL */}
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              className="w-16 h-16 flex items-center justify-center rounded-[1.6rem] bg-zinc-900 text-red-600 border-2 border-zinc-800 shadow-[0_0_15px_rgba(225,29,72,0.1)] active:scale-90 hover:bg-red-600 hover:text-white transition-all group"
+              title="DNA Visual (Foto/Rascunho)"
+            >
+              <Camera size={28} className="group-hover:scale-110 transition-transform" />
+            </button>
+            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                const r = new FileReader();
+                r.onload = (ev) => handlePipeline("", { type: 'image', url: URL.createObjectURL(f), data: (ev.target?.result as string).split(',')[1] });
+                r.readAsDataURL(f);
+              }
+            }} />
+
+            {/* INPUT CENTRAL */}
+            <div className="flex-1 bg-zinc-900 rounded-[1.8rem] flex items-center px-6 py-3 border border-zinc-800 shadow-inner group focus-within:border-red-600/50 transition-all">
+              <input 
+                type="text" placeholder="Dite comando Rubi..." 
+                className="w-full text-[14px] outline-none bg-transparent py-2 font-bold text-white placeholder-zinc-600" 
+                value={inputText} onChange={(e) => setInputText(e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handlePipeline(inputText)} 
+              />
+              <button onClick={() => inputText.trim() && handlePipeline(inputText)} className="text-red-600 p-2 hover:scale-110 transition-transform"><Send size={22} /></button>
+            </div>
+
+            {/* BOTÃO MICROFONE (DNA VOZ) - SEMPRE DISPONÍVEL */}
+            <button 
+              onMouseDown={startVoice} onMouseUp={stopVoice} onTouchStart={startVoice} onTouchEnd={stopVoice}
+              className={`w-16 h-16 rounded-[1.6rem] flex items-center justify-center shadow-2xl active:scale-90 transition-all group ${isRecording ? 'bg-red-500 animate-pulse text-white' : 'bg-red-600 text-white shadow-[0_0_20px_rgba(225,29,72,0.3)]'}`}
+              title="DNA de Voz"
+            >
+              <Mic size={28} className="group-hover:scale-110 transition-transform"/>
+            </button>
           </div>
-          <button onMouseDown={startVoiceRecording} onMouseUp={stopVoiceRecording} onTouchStart={startVoiceRecording} onTouchEnd={stopVoiceRecording} className={`w-14 h-14 rounded-[1.5rem] flex items-center justify-center active:scale-95 shadow-2xl transition-all ${isRecording ? 'bg-red-500 animate-pulse text-white' : (inputText.trim() ? 'bg-amber-600 text-white' : 'bg-zinc-900 text-white')}`} onClick={() => inputText.trim() && handlePipeline(inputText)}>{isRecording ? <Mic size={24}/> : (inputText.trim() ? <Send size={24}/> : <Mic size={24}/>)}</button>
         </footer>
       </div>
 
-      <Drawer id="BENTO" title="Engenharia Bento" color="bg-amber-600" icon={Wrench}><BentoBancada /></Drawer>
-      <Drawer id="ESTELA" title="Financeiro Estela" color="bg-emerald-600" icon={DollarSign}><EstelaBancada /></Drawer>
-      <Drawer id="IARA" title="IARA Vision" color="bg-purple-600" icon={LucideImage}><IaraVisionBancada /></Drawer>
-      <Drawer id="JUCA" title="Instalação Juca" color="bg-slate-700" icon={HardHat}><JucaBancada /></Drawer>
-      <Drawer id="CRM" title="Gestão Industrial" color="bg-blue-600" icon={Users}><MarceneiroCRMBancada /></Drawer>
-      <Drawer id="ADMIN" title="Cockpit Master" color="bg-zinc-900" icon={BarChart3}>
+      {/* DRAWERS RUBI */}
+      <Drawer id="ADMIN" title="Cockpit Rubi" color="bg-zinc-900" icon={BarChart3}>
         <div className="space-y-6">
-          <MetricCard label="Faturamento Previsto" value={`R$ ${financeiro.venda.toLocaleString('pt-BR')}`} icon={<Package size={26}/>} color="bg-blue-50" />
-          <MetricCard label="Lucro Industrial" value={`R$ ${financeiro.lucro.toLocaleString('pt-BR')}`} icon={<TrendingUp size={26}/>} color="bg-green-50" highlight />
-          <MetricCard label="Área Industrial Total" value={`${financeiro.area.toFixed(2)} m²`} icon={<Hammer size={26}/>} color="bg-amber-50" />
+          <div className="p-8 bg-[#09090b] rounded-[2.5rem] border border-red-900/40 text-center shadow-2xl">
+             <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.4em] italic mb-2 leading-none">Faturamento Rubi</p>
+             <h3 className="text-4xl font-black text-white italic tracking-tighter">R$ {financeiro.venda.toLocaleString('pt-BR')}</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div className="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-center">
+                <p className="text-[8px] font-black text-zinc-500 uppercase mb-1">Área Total</p>
+                <p className="text-xl font-black text-white">{financeiro.area.toFixed(1)}m²</p>
+             </div>
+             <div className="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-center">
+                <p className="text-[8px] font-black text-zinc-500 uppercase mb-1">MDF Chapas</p>
+                <p className="text-xl font-black text-white">{financeiro.chapas}</p>
+             </div>
+          </div>
         </div>
       </Drawer>
 
-      {state.selectedImage && (
-        <div className="fixed inset-0 z-[110000] bg-black/98 backdrop-blur-3xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-700" onClick={() => setSelectedImage(null)}>
-          <div className="relative w-full max-w-6xl h-full flex flex-col items-center justify-center">
-            <img src={state.selectedImage} className="max-w-full max-h-[84vh] rounded-[4rem] shadow-2xl border border-white/10 select-none transition-all duration-700" onClick={(e) => e.stopPropagation()} />
-            <div className="absolute top-12 right-0">
-               <button className="p-7 bg-white/10 text-white rounded-full backdrop-blur-xl border border-white/10 shadow-2xl hover:bg-white/20 transition-all" onClick={() => setSelectedImage(null)}><X size={40}/></button>
-            </div>
+      <Drawer id="TOOLS" title="Módulos" color="bg-red-800" icon={Menu}>
+        <div className="grid grid-cols-1 gap-4">
+           {['BENTO', 'ESTELA', 'JUCA', 'CRM'].map(id => (
+              <button key={id} onClick={() => setActiveModal(id)} className="flex items-center gap-5 p-6 bg-zinc-900 rounded-[2rem] border border-zinc-800 hover:border-red-600 transition-all text-left shadow-lg">
+                 <div className="w-12 h-12 rounded-2xl bg-red-600/10 text-red-600 flex items-center justify-center"><Rotate3d size={24}/></div>
+                 <span className="font-black uppercase text-[11px] tracking-widest italic text-white">{id} Cockpit</span>
+              </button>
+           ))}
+        </div>
+      </Drawer>
+
+      {/* VIEWER FOTORREALISTA RUBI */}
+      {selectedImage && (
+        <div className="fixed inset-0 z-[1000] bg-black/98 backdrop-blur-3xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-500" onClick={() => setSelectedImage(null)}>
+          <div className="relative max-w-5xl w-full flex flex-col items-center">
+            <img src={selectedImage} className="max-w-full max-h-[75vh] rounded-[3rem] shadow-[0_0_100px_rgba(225,29,72,0.3)] border border-red-600/20" onClick={(e) => e.stopPropagation()} />
             <div className="mt-12 flex gap-8">
-               <button className="px-12 py-6 bg-white/5 text-white rounded-full font-black uppercase text-[11px] tracking-[0.4em] border border-white/10 active:scale-95 flex items-center gap-3 shadow-2xl hover:bg-white/10" onClick={(e) => e.stopPropagation()}><Download size={18}/> Baixar Master Render</button>
-               <button className="px-12 py-6 bg-amber-600 text-white rounded-full font-black uppercase text-[11px] tracking-[0.4em] active:scale-95 flex items-center gap-3 shadow-[0_20px_50px_rgba(217,119,6,0.3)] hover:bg-amber-500" onClick={(e) => e.stopPropagation()}><Share2 size={18}/> Enviar Portfólio</button>
+               <button className="px-12 py-5 bg-zinc-900 text-red-600 rounded-full font-black uppercase text-[11px] tracking-[0.3em] border border-red-600/20 shadow-2xl hover:bg-red-600 hover:text-white transition-all">Download Master</button>
+               <button className="px-12 py-5 bg-red-600 text-white rounded-full font-black uppercase text-[11px] tracking-[0.3em] shadow-[0_0_30px_rgba(225,29,72,0.4)]">Enviar Portfólio</button>
             </div>
           </div>
+          <button className="absolute top-10 right-10 text-white p-4 hover:rotate-90 transition-all duration-300" onClick={() => setSelectedImage(null)}><X size={48}/></button>
         </div>
       )}
     </div>
@@ -539,262 +417,55 @@ const WorkshopInner = () => {
 };
 
 // ============================================================================
-// [5. COMPONENTES AUXILIARES]
+// [RECURSOS AUXILIARES]
 // ============================================================================
 
-const LogoSVG = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="40" height="40" rx="12" fill="#D97706" />
-    <path d="M20 8L32 15L20 22L8 15L20 8Z" fill="white" />
-    <path d="M8 25L20 32L32 25" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M8 20L20 27L32 20" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+const LogoSVG = ({ size = 24, className = "" }: any) => (
+  <svg width={size} height={size} viewBox="0 0 40 40" fill="none" className={className}>
+    <rect width="40" height="40" rx="10" fill="white" />
+    <path d="M20 10L30 16L20 22L10 16L20 10Z" fill="#e11d48" />
+    <path d="M10 24L20 30L30 24" stroke="#e11d48" strokeWidth="2.5" />
   </svg>
-);
-
-const MetricCard = ({ label, value, icon, color, highlight }: any) => (
-  <div className={`p-6 rounded-[2.5rem] ${color} flex items-center justify-between border border-black/5 shadow-sm transition-all hover:scale-[1.02]`}>
-    <div className="text-left">
-      <p className="text-[10px] font-black uppercase text-zinc-400 mb-1 leading-none tracking-widest">{label}</p>
-      <p className={`text-2xl font-black ${highlight ? 'text-zinc-900 italic' : 'text-zinc-700'} tracking-tighter`}>{value}</p>
-    </div>
-    <div className="p-4 bg-white rounded-2xl shadow-sm text-zinc-400">{icon}</div>
-  </div>
 );
 
 const Drawer = ({ id, title, color, icon, children }: any) => {
   const { activeModal, setActiveModal } = useContext(MarcenaContext);
   if (activeModal !== id) return null;
   return (
-    <div className="fixed inset-0 z-[120000] flex justify-end">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setActiveModal(null)} />
-      <div className="relative w-full max-w-[450px] h-full bg-[#f8fafc] shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden">
-        <header className={`${color} p-10 text-white flex justify-between items-center shrink-0 shadow-lg`}>
+    <div className="fixed inset-0 z-[1000] flex justify-end">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setActiveModal(null)} />
+      <div className="relative w-full max-w-[420px] h-full bg-[#09090b] shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 border-l border-red-900/30">
+        <header className={`${color} p-10 text-white flex justify-between items-center shadow-2xl`}>
           <div className="flex items-center gap-5">
-            <div className="p-4 bg-white/20 rounded-[1.5rem] backdrop-blur-md border border-white/20 shadow-xl">{React.createElement(icon, { size: 28 })}</div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-60">Cockpit MarcenApp</span>
-              <h2 className="text-2xl font-black uppercase tracking-widest italic">{title}</h2>
-            </div>
+            <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">{React.createElement(icon, { size: 28 })}</div>
+            <h2 className="text-2xl font-black uppercase tracking-widest italic">{title}</h2>
           </div>
-          <button onClick={() => setActiveModal(null)} className="p-4 bg-black/10 rounded-full hover:bg-black/20 transition-all active:scale-90"><X size={28} /></button>
+          <button onClick={() => setActiveModal(null)} className="p-4 bg-black/20 rounded-full hover:rotate-90 transition-all"><X size={28} /></button>
         </header>
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#f8fafc]">
-          {children}
-          <div className="h-20" />
-        </div>
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">{children}</div>
       </div>
     </div>
   );
 };
 
-const BentoBancada = () => {
-  const { state, financeiro, industrialRates } = useContext(MarcenaContext);
-  const [showCostDetail, setShowCostDetail] = useState(false);
-
-  return (
-    <div className="space-y-6 text-zinc-900 text-left">
-      <div className="p-6 bg-white rounded-3xl border shadow-sm">
-        <div className="flex justify-between items-center bg-slate-50 p-5 rounded-3xl">
-          <div className="text-left">
-            <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-2 italic">Engenharia Estrutural</p>
-            <p className="text-3xl font-black text-slate-800 leading-none">{financeiro?.chapas || 0} Chapas MDF</p>
-          </div>
-          <Package size={24} className="text-amber-600" />
-        </div>
-
-        <button 
-          onClick={() => setShowCostDetail(!showCostDetail)}
-          className="mt-6 w-full py-4 bg-zinc-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-zinc-800 transition-all active:scale-95 shadow-xl italic"
-        >
-          {showCostDetail ? 'Ocultar Detalhamento' : 'Calcular Custo por Material'}
-        </button>
-
-        {showCostDetail && (
-          <div className="mt-5 p-6 bg-amber-50 rounded-[2.5rem] border border-amber-100 animate-in slide-in-from-top-3 duration-500">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-4 italic">Análise Industrial de Custos</h4>
-            <div className="space-y-4">
-              <div className="flex justify-between text-[11px] font-bold text-zinc-600">
-                <span>Preço Chapa:</span>
-                <span className="text-zinc-900">R$ {industrialRates.mdf.toLocaleString('pt-BR')}</span>
-              </div>
-              <div className="flex justify-between text-[11px] font-bold text-zinc-600">
-                <span>Chapas Usadas:</span>
-                <span className="text-zinc-900">{financeiro.chapas} un</span>
-              </div>
-              <div className="border-t border-amber-200 pt-4 flex justify-between text-[14px]">
-                <span className="font-black text-amber-800 uppercase italic">Total MDF:</span>
-                <span className="font-black text-amber-900">R$ {(financeiro.chapas * industrialRates.mdf).toLocaleString('pt-BR')}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-black uppercase text-zinc-400 tracking-widest px-2 italic">DNA Industrial</h3>
-        {state.messages.filter(m => m.project).map((msg: Message, idx: number) => (
-          <div key={idx} className="bg-white border border-slate-100 rounded-[2.5rem] overflow-hidden shadow-sm hover:border-amber-200 transition-all group">
-             <div className="bg-zinc-900 p-5 text-white flex justify-between items-center group-hover:bg-amber-600 transition-colors">
-               <span className="text-[11px] font-black uppercase leading-none italic tracking-widest">{msg.project!.title}</span>
-               <Cpu size={18} />
-             </div>
-             <div className="p-3">
-               <table className="w-full text-left text-[11px] font-bold">
-                 <tbody className="divide-y divide-zinc-50 text-zinc-900">
-                   {msg.project!.modules.map((p: any, i: number) => (
-                     <tr key={i} className="hover:bg-slate-50 transition-colors">
-                       <td className="p-4 uppercase text-zinc-500">{p.type}</td>
-                       <td className="p-4 text-amber-700 font-mono text-center">{p.dimensions.w}x{p.dimensions.h}</td>
-                       <td className="p-4 font-black text-center text-zinc-300">1x</td>
-                     </tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const EstelaBancada = () => {
-  const { financeiro, industrialRates, setIndustrialRates } = useContext(MarcenaContext);
-  return (
-    <div className="space-y-6 text-zinc-900 text-left">
-      <div className={`p-10 rounded-[3rem] border-l-[16px] shadow-2xl transition-all ${financeiro.isLowProfit ? 'border-red-500 bg-red-50' : 'border-emerald-500 bg-emerald-50'}`}>
-        <div className="flex justify-between items-start">
-           <div className="text-left">
-             <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest italic">Lucro Industrial</p>
-             <h3 className={`text-5xl font-black tracking-tighter italic ${financeiro.isLowProfit ? 'text-red-600' : 'text-emerald-600'}`}>R$ {financeiro.lucro.toLocaleString('pt-BR')}</h3>
-           </div>
-           <TrendingUp size={30} className={financeiro.isLowProfit ? 'text-red-600' : 'text-emerald-600'} />
-        </div>
-      </div>
-      <div className="p-10 bg-zinc-900 rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border-b-4 border-amber-600">
-        <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest mb-3 leading-none italic">Valor de Venda (Impostos Inc.)</p>
-        <h2 className="text-6xl font-black text-white italic tracking-tighter leading-none">R$ {financeiro.venda.toLocaleString('pt-BR')}</h2>
-      </div>
-      <div className="p-8 bg-white border border-slate-100 rounded-[2.5rem] space-y-6 shadow-md">
-        <div className="flex justify-between items-center">
-           <h3 className="text-[11px] font-black uppercase text-zinc-400 tracking-widest italic">Markup Industrial</h3>
-           <span className="bg-emerald-600 text-white px-4 py-1.5 rounded-full font-black text-[11px] italic">{industrialRates.markup}x</span>
-        </div>
-        <input type="range" min="1.1" max="4.0" step="0.05" className="w-full h-2 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-emerald-600" value={industrialRates.markup} onChange={(e: any) => setIndustrialRates({...industrialRates, markup: parseFloat(e.target.value)})} />
-      </div>
-    </div>
-  );
-};
-
-const IaraVisionBancada = () => {
-  const { state, setSelectedImage } = useContext(MarcenaContext);
-  const galleryImages = state.messages
-    .filter((m: Message) => m.project && m.project.render.status === 'done')
-    .flatMap((m: Message) => [
-      { url: m.project!.render.faithfulUrl, title: `${m.project!.title} (Fiel)` }, 
-      { url: m.project!.render.decoratedUrl, title: `${m.project!.title} (AD Style)` }
-    ])
-    .filter(img => img.url);
-  return (
-    <div className="space-y-6 text-zinc-900 text-left">
-      <div className="flex items-center justify-between mb-2"><h2 className="text-xl font-black uppercase tracking-widest italic">Portfólio Industrial</h2></div>
-      <div className="grid grid-cols-2 gap-5">
-        {galleryImages.length === 0 ? (
-          <div className="col-span-2 py-32 text-center opacity-30 italic text-[11px] font-black uppercase">Vazio.</div>
-        ) : (
-          galleryImages.map((img: any, i: number) => (
-            <div key={i} className="group relative aspect-square bg-zinc-200 rounded-[2.5rem] overflow-hidden shadow-xl cursor-pointer border-4 border-white transition-all hover:scale-105" onClick={() => setSelectedImage(img.url)}>
-              <img src={img.url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-};
-
-const JucaBancada = () => (
-  <div className="space-y-6 text-zinc-900 text-left text-center p-12 bg-white rounded-[3rem]">
-    <HardHat size={56} className="mx-auto text-slate-400 mb-6" />
-    <h3 className="text-2xl font-black uppercase italic">Instalação</h3>
-    <p className="text-xs text-slate-500 mb-8">Gestão de montagem v283 Supreme.</p>
-    <button className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">Abrir Cronograma</button>
-  </div>
-);
-
-const MarceneiroCRMBancada = () => (
-  <div className="space-y-6 text-zinc-900 text-left text-center p-12 bg-white rounded-[3rem]">
-    <Users size={56} className="mx-auto text-blue-400 mb-6" />
-    <h3 className="text-2xl font-black uppercase italic">Funil de Vendas</h3>
-    <button className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">Acessar CRM</button>
-  </div>
-);
-
-const useFinanceiro = (messages: Message[], industrialRates: { mdf: number; markup: number }, manualParts: any[]) => {
+const useFinanceiro = (messages: Message[]) => {
   return useMemo(() => {
-    let totalArea = 0;
-    let totalVenda = 0;
-    let totalCustoDirecto = 0;
-    messages.forEach((m) => {
-      if (m.project && m.status === 'done') {
-        const area = YaraParsers.calculateTotalArea(m.project.modules);
-        totalArea += area;
-        totalVenda += m.project.pricing?.finalPrice || 0;
-        totalCustoDirecto += m.project.pricing?.total || 0;
-      }
-    });
-    manualParts.forEach((p) => totalArea += (p.w * p.h * p.q) / 1000000);
-    const chapas = Math.ceil(totalArea / (MDF_SHEET_AREA * 0.82));
-    const lucro = totalVenda - totalCustoDirecto;
-    const isLowProfit = totalVenda > 0 ? (lucro / totalVenda < DEFAULT_MARGIN) : false;
-    return { area: totalArea, venda: totalVenda, lucro, chapas, isLowProfit };
-  }, [messages, manualParts, industrialRates]);
+    let area = 0; let venda = 0;
+    messages.forEach(m => { if(m.project && m.status === 'done') { area += YaraParsers.calculateTotalArea(m.project.modules); venda += m.project.pricing.finalPrice; }});
+    return { area, venda, chapas: Math.ceil(area / (MDF_SHEET_AREA * 0.82)), lucro: venda * 0.38 };
+  }, [messages]);
 };
 
-// ============================================================================
-// [6. APP SUPREME]
-// ============================================================================
-
-const App: React.FC = () => {
-  const [state, dispatch] = useReducer(marcenaReducer, {
-    messages: [{ id: 'welcome', type: MessageType.IARA, content: 'Cockpit v283 Supreme Online. Engine Industrial Pronto.', timestamp: new Date(), status: 'done' }],
-    isLoading: false,
-    isAdminMode: false
-  });
+const App = () => {
+  const [state, dispatch] = useReducer(marcenaReducer, { messages: [{ id: 'w', type: MessageType.IARA, content: 'Cockpit Yara Rubi v3.0 Supreme Online. Pronto para transformar DNA em fotorrealismo e produção.', timestamp: new Date(), status: 'done' }], isLoading: false, isAdminMode: false });
   const [activeModal, setActiveModal] = useState<string | null>(null);
-  const [manualParts, setManualParts] = useState<any[]>([]);
-  const [industrialRates, setIndustrialRates] = useState({ mdf: MDF_SHEET_PRICE, markup: 1.38 });
+  const [industrialRates] = useState({ mdf: MDF_SHEET_PRICE, markup: 1.38 });
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const financeiro = useFinanceiro(state.messages, industrialRates, manualParts);
-
-  const notify = useCallback((text: string) => {
-    const toast = document.createElement('div');
-    toast.className = "fixed top-36 left-1/2 -translate-x-1/2 z-[130000] bg-[#09090b] text-white text-[12px] font-black px-12 py-6 rounded-full shadow-2xl border border-amber-600/40 uppercase tracking-[0.4em] text-center backdrop-blur-md italic animate-in fade-in zoom-in duration-300";
-    toast.innerText = text;
-    document.body.appendChild(toast);
-    setTimeout(() => { toast.classList.add('animate-out', 'fade-out', 'zoom-out'); setTimeout(() => toast.remove(), 300); }, 3500);
-  }, []);
-
-  const reRender = async (msgId: string, style: string) => {
-    const msg = state.messages.find(m => m.id === msgId);
-    if (!msg || !msg.project) return;
-    notify(`🎨 Renderizando: ${style}...`);
-    dispatch({ type: 'PROGRESS_UPDATE', id: msgId, stepUpdate: { render: false } });
-    try {
-      const renderRes = await RenderEngine.generate(msg.project, msg.attachment?.data, style);
-      dispatch({ type: 'PROGRESS_UPDATE', id: msgId, payload: { render: renderRes }, stepUpdate: { render: true } });
-      notify("✅ Sucesso!");
-    } catch (e) {
-      notify("❌ Erro.");
-    }
-  };
+  const financeiro = useFinanceiro(state.messages);
+  const notify = useCallback((t: string) => { const toast = document.createElement('div'); toast.className = "fixed top-32 left-1/2 -translate-x-1/2 z-[2000] bg-red-600 text-white text-[12px] font-black px-12 py-6 rounded-full shadow-[0_0_50px_rgba(225,29,72,0.4)] uppercase tracking-[0.3em] animate-in fade-in slide-in-from-top-4 italic text-center whitespace-nowrap"; toast.innerText = t; document.body.appendChild(toast); setTimeout(() => toast.remove(), 4000); }, []);
 
   return (
-    <MarcenaContext.Provider value={{ 
-      state, dispatch, financeiro, activeModal, setActiveModal, 
-      manualParts, setManualParts, industrialRates, setIndustrialRates,
-      notify, selectedImage, setSelectedImage, reRender
-    }}>
+    <MarcenaContext.Provider value={{ state, dispatch, financeiro, activeModal, setActiveModal, industrialRates, notify, selectedImage, setSelectedImage }}>
       <WorkshopInner />
     </MarcenaContext.Provider>
   );
