@@ -4,36 +4,43 @@ import { LABOR_RATE_M2 } from '../../constants';
 
 export const BudgetEngine = {
   /**
-   * Calcula o custo detalhado do projeto
+   * Calcula o orçamento comercial completo do projeto seguindo o Padrão Yara 1.0.
    */
   calculate: (project: ProjectData, rates: { mdf: number; markup: number }) => {
     const totalArea = project.modules?.reduce((acc, mod) => acc + (mod.dimensions.w * mod.dimensions.h) / 1000000, 0) || 0;
     
-    // Estimativa de chapas baseada em área útil
-    const chapasCount = Math.ceil(totalArea / 4.5); 
+    // Cálculo de Chapas e Materiais
+    const chapasCount = Math.ceil(totalArea / 4.3); 
     const mdfCost = chapasCount * rates.mdf;
+    const hardwareCost = mdfCost * 0.22; // Ferragens estimadas em 22% do MDF
+    const otherCosts = (mdfCost + hardwareCost) * 0.08; // Outros (cola, fitas, parafusos)
     
-    // Ferragens (15% do valor do material como estimativa base)
-    const hardwareCost = mdfCost * 0.15;
-    
-    // Mão de Obra Master
+    // Mão de Obra
     const laborCost = totalArea * LABOR_RATE_M2;
     
-    const subtotal = mdfCost + hardwareCost + laborCost;
-    const finalPrice = subtotal * rates.markup;
+    // Total de Custos Diretos
+    const totalCost = mdfCost + hardwareCost + laborCost + otherCosts;
+    
+    // Preço Comercial
+    const finalPrice = totalCost * rates.markup;
+    const profit = finalPrice - totalCost;
+    const margin = (profit / finalPrice) * 100;
 
     return {
       status: 'done' as const,
       materials: [
-        { name: 'MDF Estrutural', cost: mdfCost },
-        { name: 'Ferragens Pro', cost: hardwareCost },
+        { name: 'MDF Estrutural (Chapas)', cost: mdfCost },
+        { name: 'Ferragens & Acessórios Pro', cost: hardwareCost },
+        { name: 'Insumos & Outros', cost: otherCosts }
       ],
-      total: subtotal,
+      total: totalCost,
       labor: laborCost,
       finalPrice: finalPrice,
+      profit: profit,
+      margin: margin,
       chapas: chapasCount,
-      // Adicionado creditsUsed para satisfazer o contrato da interface ProjectData
-      creditsUsed: 0
+      prazoDias: 30 + (project.complexity * 2),
+      creditsUsed: 10 // Custo fixo do combo full
     };
   }
 };

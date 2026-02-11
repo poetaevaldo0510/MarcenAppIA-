@@ -31,6 +31,7 @@ export type YaraPlan = 'BASIC' | 'PRO' | 'STUDIO' | 'ENTERPRISE';
 
 export interface ProjectData {
   projectId: string;
+  conversationId: string;
   source: {
     type: 'text' | 'voice' | 'image' | 'sketch2d' | 'hybrid';
     content?: string;
@@ -56,7 +57,6 @@ export interface ProjectData {
     labor: number;
     finalPrice: number;
     creditsUsed: number;
-    // Adicionado chapas ao contrato técnico para persistência e visualização
     chapas: number;
   };
   cutPlan: {
@@ -69,7 +69,9 @@ export interface ProjectData {
 
 export interface Message {
   id: string;
+  conversationId: string;
   from: 'user' | 'iara';
+  type: 'text' | 'image' | 'typing' | 'audio';
   text: string;
   timestamp: string;
   src?: string;
@@ -90,4 +92,5 @@ export interface MarcenaState {
   credits: number;
   currentPlan: YaraPlan;
   transactions: CreditTransaction[];
+  conversationId: string | null;
 }

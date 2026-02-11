@@ -1,12 +1,27 @@
 
 import React, { memo } from "react";
-import { CheckCheck, Maximize, RotateCcw, Award, DollarSign, Wrench } from "lucide-react";
+import { CheckCheck, Maximize, RotateCcw, Award, DollarSign, Wrench, Loader2, Sparkles, Box } from "lucide-react";
 import { useStore } from "../../store/yaraStore";
 import { ProgressStep } from "./ProgressStep";
 
 export const MessageBubble = memo(({ message: m, onPreview }: { message: any, onPreview: (src: string) => void }) => {
   const store = useStore();
   
+  if (m.type === 'typing') {
+    return (
+      <div className="flex justify-start animate-in fade-in slide-in-from-left-2 duration-300">
+        <div className="bg-white border border-slate-100 p-4 rounded-3xl rounded-tl-none shadow-sm flex items-center gap-3">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{m.text || "Yara processando..."}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex ${m.from === "user" ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}>
       <div className={`max-w-[90%] sm:max-w-[80%] flex flex-col ${m.from === "user" ? "items-end" : "items-start"}`}>
@@ -44,9 +59,16 @@ export const MessageBubble = memo(({ message: m, onPreview }: { message: any, on
                     </div>
                   </div>
                 ) : (
-                  <div className="h-40 bg-white rounded-[2rem] border border-slate-100 flex flex-col items-center justify-center animate-pulse gap-3">
-                    <RotateCcw className="animate-spin text-amber-500" size={32} />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Yara Renderizando...</span>
+                  <div className="h-64 bg-white rounded-[2rem] border border-slate-100 flex flex-col items-center justify-center gap-6 overflow-hidden relative">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#D9770608_0%,_transparent_70%)] animate-pulse" />
+                    <div className="relative">
+                       <Loader2 className="animate-spin text-amber-500" size={48} />
+                       <Sparkles className="absolute -top-2 -right-2 text-amber-400 animate-bounce" size={16} />
+                    </div>
+                    <div className="text-center space-y-2 relative z-10">
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">Materializando Render 8K</span>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-8 leading-relaxed">Sincronizando luz Architectural Digest e volumes técnicos...</p>
+                    </div>
                   </div>
                 )}
                 

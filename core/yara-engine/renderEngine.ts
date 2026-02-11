@@ -4,25 +4,25 @@ import { ProjectData } from '../../types';
 
 export const RenderEngine = {
   /**
-   * Gera renders fotorrealistas baseados no rascunho.
-   * Prioriza a geometria do rascunho original.
+   * YaraEngine.generateRender
+   * Motor de materialização visual fotorrealista.
+   * Prioriza a geometria do rascunho e aplica estética Architectural Digest.
    */
-  generate: async (project: ProjectData, sketchData?: string): Promise<{ faithful: string, decorated: string }> => {
-    // Criamos a instância aqui para garantir o uso da chave mais recente do ambiente
+  generateRender: async (project: ProjectData, sketchBase64?: string): Promise<{ faithful: string, decorated: string }> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    const materials = project.modules?.map(m => `${m.material} (${m.finish})`).join(", ") || "Madeira MDF";
-    const modulesInfo = project.modules?.map(m => `${m.type} ${m.dimensions.w}x${m.dimensions.h}mm`).join(", ");
+    const materials = project.modules?.map(m => `${m.material} (${m.finish})`).join(", ") || "MDF Premium";
+    const technicalDescription = project.modules?.map(m => `${m.type} (${m.dimensions.w}x${m.dimensions.h}mm)`).join(", ");
 
-    const callModel = async (prompt: string, imageBase64?: string) => {
+    const callModel = async (prompt: string, sketch?: string) => {
       const parts: any[] = [];
       
-      // A imagem de referência (rascunho) é o âncora principal
-      if (imageBase64) {
+      // A imagem de rascunho é injetada como a primeira parte para servir de âncora visual (Image-to-Image)
+      if (sketch) {
         parts.push({
           inlineData: {
             mimeType: 'image/jpeg',
-            data: imageBase64.replace(/^data:image\/[a-z]+;base64,/, '')
+            data: sketch.replace(/^data:image\/[a-z]+;base64,/, '')
           }
         });
       }
@@ -48,37 +48,40 @@ export const RenderEngine = {
             }
           }
         }
-        return '';
-      } catch (err: any) {
+        throw new Error("Yara Hardware: Falha ao capturar buffer de imagem.");
+      } catch (err) {
         console.error("Render Engine Error:", err);
-        throw err; // Propaga para tratamento de 403 no nível superior
+        throw err;
       }
     };
 
-    // Prompt 1: Fidelidade Técnica (Foco em proporção e material)
+    // PROMPT 1: Fidelidade Geométrica e de Proporção
     const faithfulPrompt = `
-      TECHNICAL 3D CAD RENDERING - HIGH FIDELITY.
-      SUBJECT: Custom furniture from the attached sketch.
-      ENGINEERING GOAL: Follow the EXACT geometric proportions, lines, and layout of the provided image. 
-      DETAILS: ${modulesInfo}. Materials: ${materials}.
-      LIGHTING: Balanced technical studio lighting, neutral background, sharp shadows to show depth.
-      STYLE: Industrial design visualization, 8K resolution, photorealistic textures.
+      ACT AS A MASTER CABINET MAKER AND 3D ARTIST.
+      TASK: PHOTOREALISTIC 3D RECONSTRUCTION.
+      SOURCE: Follow the EXACT perspective, lines, and proportions of the provided sketch. 
+      PROJECT: ${project.title}. 
+      SPECS: ${technicalDescription}. 
+      MATERIALS: ${materials}.
+      LIGHTING: High-key studio setup, clean shadows, neutral background. 
+      GOAL: A technical render that looks exactly like the sketch but in real-life materials.
     `;
 
-    // Prompt 2: Estética Architectural Digest (Foco em atmosfera e luxo)
+    // PROMPT 2: Composição AD Style (Architectural Digest)
     const decoratedPrompt = `
-      ARCHITECTURAL DIGEST LUXURY INTERIOR PHOTOGRAPHY.
-      FURNITURE: The custom piece from the sketch, fully finished in ${materials}.
-      ATMOSPHERE: High-end contemporary residence, elegant styling.
-      LIGHTING: Professional soft-diffused natural daylight from a large window. Cinematic depth of field.
-      COMPOSITION: Architectural framing, 35mm lens look, magazine cover quality, 8K, sophisticated color palette.
-      Keep the furniture's core design identical to the sketch.
+      ACT AS AN ARCHITECTURAL PHOTOGRAPHER FOR ARCHITECTURAL DIGEST.
+      TASK: LUXURY INTERIOR RENDERING.
+      FURNITURE: Use the exact modular design from the sketch.
+      STYLE: Contemporary luxury, high-end finishing.
+      LIGHTING: Architectural Digest signature lighting. Soft global illumination, natural morning sun entering through a side window, warm ambient interior highlights.
+      ENVIRONMENT: A curated modern living space with premium textures (marble, oak flooring).
+      COMPOSITION: Professional wide-angle framing (24mm style), balanced rule of thirds, cinematic depth of field.
     `;
 
-    // Execução paralela para performance
+    // Execução assíncrona paralela: Não bloqueia a UI e processa ambos simultaneamente
     const [faithful, decorated] = await Promise.all([
-      callModel(faithfulPrompt, sketchData),
-      callModel(decoratedPrompt, sketchData)
+      callModel(faithfulPrompt, sketchBase64),
+      callModel(decoratedPrompt, sketchBase64)
     ]);
 
     return { faithful, decorated };
