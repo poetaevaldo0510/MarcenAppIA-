@@ -52,7 +52,9 @@ export const MessageBubble = memo(({ message: m, onPreview }: { message: any, on
             <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
             <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
-          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">{m.text}</span>
+          <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest leading-none animate-pulse">
+            {m.text || 'YARA: Escaneando DNA Industrial...'}
+          </span>
         </div>
       </div>
     );

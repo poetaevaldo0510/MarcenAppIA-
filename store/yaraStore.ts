@@ -30,6 +30,7 @@ interface MarcenaState {
   setManualApiKey: (key: string | null) => void;
   setKeyStatus: (status: 'inactive' | 'active' | 'error') => void;
   setLoadingAI: (loading: boolean) => void;
+  setSearchQuery: (query: string) => void;
   
   syncUserFromDB: () => Promise<void>;
   addMessage: (msg: Partial<Message>) => string;
@@ -69,6 +70,7 @@ export const useStore = create<MarcenaState>()(
       setKeyStatus: (keyStatus) => set({ keyStatus }),
       setLoadingAI: (loadingAI) => set({ loadingAI }),
       setPreview: (selectedImage) => set({ selectedImage }),
+      setSearchQuery: (searchQuery) => set({ searchQuery }),
       
       syncUserFromDB: async () => {
         const currentUser = get().user;

@@ -11,38 +11,36 @@ export const YaraEngine = {
     return new GoogleGenAI({ apiKey });
   },
 
+  // Teste de conexão para verificar a validade da chave API e faturamento ativo
   testConnection: async (apiKey?: string): Promise<boolean> => {
     try {
       const key = apiKey || useStore.getState().manualApiKey || process.env.API_KEY;
       if (!key) return false;
+      
       const ai = new GoogleGenAI({ apiKey: key });
-      const response = await ai.models.generateContent({
+      // Realiza uma chamada de baixo custo para validar as credenciais
+      await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: 'ping',
       });
-      return !!response.text;
+      return true;
     } catch (e) {
-      console.error("YARA ENGINE: Erro de conexão", e);
+      console.error("Connection test failed:", e);
       return false;
     }
   },
 
-  /**
-   * PROTOCOLO B: MOTOR DE CORREÇÃO AUTOMÁTICA
-   * Se a geometria falhar, Yara sugere o ajuste técnico.
-   */
   suggestCorrection: (projectData: any): string | null => {
     const sumModulesW = projectData.modules?.reduce((acc: number, m: any) => acc + (m.dimensions?.w || 0), 0) || 0;
     const envW = projectData.environment?.width || 0;
 
     if (sumModulesW > envW && envW > 0) {
       const diff = sumModulesW - envW;
-      // Busca o maior módulo para sugerir redução
       const modules = [...(projectData.modules || [])].sort((a, b) => b.dimensions.w - a.dimensions.w);
       if (modules.length > 0) {
         const target = modules[0];
-        const newW = target.dimensions.w - diff;
-        return `SUGESTÃO YARA: Reduzir módulo '${target.type}' de ${target.dimensions.w}mm para ${newW}mm para respeitar a largura de ${envW}mm.`;
+        const newW = Math.max(0, target.dimensions.w - diff);
+        return `SUGESTÃO DE AJUSTE: Ocupação de ${sumModulesW}mm excede vão de ${envW}mm. Recomenda-se reduzir o módulo '${target.type}' para ${newW}mm.`;
       }
     }
     return null;
@@ -54,17 +52,33 @@ export const YaraEngine = {
     const envW = projectData.environment?.width || 0;
     const envH = projectData.environment?.height || 0;
 
-    if (!envW || !envH) alerts.push("ERRO: Medidas do ambiente não informadas.");
-    if (!projectData.modules || projectData.modules.length === 0) alerts.push("ERRO: Nenhum módulo identificado.");
-
-    if (envW > 0 && sumModulesW > 0) {
-      if (sumModulesW > envW) {
-        alerts.push(`INCONSISTÊNCIA: Soma (${sumModulesW}mm) > Ambiente (${envW}mm).`);
+    // 1. Verificação de Dimensões Mínimas e Máximas Industriais
+    if (!envW || envW < 150) alerts.push("BLOQUEIO: Vão de largura insuficiente para fabricação.");
+    if (!envH || envH < 150) alerts.push("BLOQUEIO: Pé-direito incompatível com padrões de mobiliário.");
+    
+    // 2. Validação de Espessura de MDF (Padrões Industriais: 6, 9, 12, 15, 18, 25, 30)
+    const validThicknesses = [6, 9, 12, 15, 18, 25, 30];
+    projectData.modules?.forEach((m: any) => {
+      if (m.thickness && !validThicknesses.includes(m.thickness)) {
+        alerts.push(`ALERTA: Espessura de ${m.thickness}mm no módulo '${m.type}' não é padrão comercial.`);
       }
+    });
+
+    // 3. Verificação Rigorosa de Proporção Estrutural
+    if (envW > 0 && envH > 0) {
+      const ratio = envW / envH;
+      // Se a largura for 6x maior que a altura sem divisórias ou apoios claros
+      if (ratio > 6) alerts.push("ALERTA: Proporção horizontal instável. Risco de flambagem estrutural.");
+      if (ratio < 0.1) alerts.push("ALERTA: Proporção vertical instável (torre excessivamente estreita).");
+    }
+
+    // 4. Verificação de Ocupação do Vão
+    if (envW > 0 && sumModulesW > envW) {
+      alerts.push(`CONFLITO: Soma das larguras dos módulos (${sumModulesW}mm) maior que o vão disponível (${envW}mm).`);
     }
 
     return {
-      isValid: alerts.filter(a => a.startsWith("ERRO") || a.startsWith("INCONSISTÊNCIA")).length === 0,
+      isValid: alerts.filter(a => a.startsWith("BLOQUEIO") || a.startsWith("CONFLITO")).length === 0,
       alerts
     };
   },
@@ -72,7 +86,7 @@ export const YaraEngine = {
   processInput: async (text: string, attachment?: Attachment): Promise<ProjectData | null> => {
     try {
       const ai = YaraEngine.getAi();
-      const parts: any[] = [{ text: text || "Analise as medidas e estrutura deste projeto de marcenaria." }];
+      const parts: any[] = [{ text: text || "Extraia o DNA técnico deste pedido de marcenaria." }];
       
       if (attachment?.data) {
         parts.push({ 
@@ -92,9 +106,16 @@ export const YaraEngine = {
         }
       });
 
-      const parsed = JSON.parse(response.text || "{}");
-      const projectData = parsed.project || parsed;
+      let parsed = JSON.parse(response.text || "{}");
+      let projectData = parsed.project || parsed;
+      
       const validation = YaraEngine.validateGeometry(projectData);
+      
+      // Integrar sugestão de correção caso a geometria seja inválida
+      const correction = YaraEngine.suggestCorrection(projectData);
+      if (correction && !validation.isValid) {
+        validation.alerts.push(correction);
+      }
 
       return {
         ...projectData,
@@ -104,7 +125,7 @@ export const YaraEngine = {
         validation: {
           isValid: validation.isValid,
           alerts: validation.alerts,
-          coherenceScore: validation.isValid ? 100 : 0
+          coherenceScore: validation.isValid ? 100 : 40
         },
         render: { status: 'pending' },
         pricing: { status: 'pending' },
