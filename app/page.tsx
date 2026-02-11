@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   X, Mic, ShieldCheck, Plus, Menu, Image as LucideImage, Send, Loader2, Sparkles, 
   ChevronRight, Scissors, Share2, RotateCcw, Wallet, LogOut, LogIn, Volume2, ShieldAlert,
-  ChevronLeft, CheckCircle, Hammer, Ruler, Package, DollarSign, Settings2
+  ChevronLeft, CheckCircle, Hammer, Ruler, Package, DollarSign, Settings2, UserPlus
 } from "lucide-react";
 import { useStore } from "../store/yaraStore";
 import { ChatFlowService } from "../services/chatFlow";
@@ -15,9 +16,11 @@ import { AdminDashboard } from "../components/admin/AdminDashboard";
 
 export default function Workshop() {
   const store = useStore();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("evaldo@marcenapp.com.br");
+  const [password, setPassword] = useState("123456");
   const [authLoading, setAuthLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  
   const [input, setInput] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [sidebar, setSidebar] = useState(false);
@@ -49,11 +52,31 @@ export default function Workshop() {
     if (scrollRef.current) scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [store.messages, store.loadingAI]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert("ACESSO NEGADO: " + error.message);
+    
+    if (isSignUp) {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        alert("FALHA NO REGISTRO: " + error.message);
+      } else if (data.user) {
+        // Criar perfil na tabela public.users
+        const isMaster = email === 'evaldo@marcenapp.com.br';
+        const { error: dbError } = await supabase.from('users').upsert({
+          id: data.user.id,
+          email: email,
+          credits: isMaster ? 5000 : 50,
+          plan: isMaster ? 'enterprise' : 'free'
+        });
+        if (dbError) console.error("Erro ao criar perfil:", dbError);
+        alert("CONTA CRIADA COM SUCESSO! Verifique seu e-mail ou faça login.");
+        setIsSignUp(false);
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) alert("ACESSO NEGADO: " + error.message);
+    }
     setAuthLoading(false);
   };
 
@@ -111,22 +134,36 @@ export default function Workshop() {
             <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em] mt-2">Engenharia Digital v6.0</p>
           </div>
         </div>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <input 
-            type="email" placeholder="E-mail Corporativo" 
-            className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
-            value={email} onChange={e => setEmail(e.target.value)} required
-          />
-          <input 
-            type="password" placeholder="Chave Mestra" 
-            className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
-            value={password} onChange={e => setPassword(e.target.value)} required
-          />
-          <button disabled={authLoading} className="w-full py-6 bg-zinc-900 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all disabled:opacity-50">
-            {authLoading ? <Loader2 className="animate-spin" size={24} /> : <LogIn size={24} />} 
-            Acessar Workshop
+        <form onSubmit={handleAuth} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-zinc-400 ml-4">E-mail Corporativo</label>
+            <input 
+              type="email" placeholder="nome@empresa.com" 
+              className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
+              value={email} onChange={e => setEmail(e.target.value)} required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-zinc-400 ml-4">Chave Mestra</label>
+            <input 
+              type="password" placeholder="••••••" 
+              className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
+              value={password} onChange={e => setPassword(e.target.value)} required
+            />
+          </div>
+          <button disabled={authLoading} className="w-full py-6 bg-zinc-900 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all disabled:opacity-50 shadow-xl shadow-zinc-200">
+            {authLoading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? <UserPlus size={24} /> : <LogIn size={24} />)} 
+            {isSignUp ? "Cadastrar no Hub" : "Acessar Workshop"}
           </button>
         </form>
+        <div className="text-center pt-2">
+          <button 
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-[11px] font-black uppercase text-amber-600 hover:text-amber-700 transition-colors"
+          >
+            {isSignUp ? "Já tenho acesso • Fazer Login" : "Não tenho conta • Cadastrar agora"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -160,7 +197,7 @@ export default function Workshop() {
             <LogoSVG size={40} /><BrandHeading />
           </div>
           <div className="flex items-center gap-3">
-             <div className="px-5 py-2.5 bg-white/5 rounded-2xl border border-white/10 flex items-center gap-3" onClick={() => store.setModal('BILLING')}>
+             <div className="px-5 py-2.5 bg-white/5 rounded-2xl border border-white/10 flex items-center gap-3 cursor-pointer hover:bg-white/10 transition-all" onClick={() => store.setModal('BILLING')}>
                <Wallet size={16} className="text-amber-500" />
                <span className="text-[11px] font-black italic text-amber-500">{store.credits}</span>
              </div>
@@ -227,7 +264,6 @@ export default function Workshop() {
 
         <Drawer id="BILLING" title="Recarga do Hub" color="bg-amber-600" icon={Wallet}><BillingContent /></Drawer>
         <Drawer id="BENTO" title="Plano de Corte CNC" color="bg-blue-600" icon={Scissors}><CutPlanContent activeProject={activeProject} /></Drawer>
-        <Drawer id="ESTELA" title="Orçamento Executivo" color="bg-emerald-600" icon={DollarSign}><BudgetContent financeiroTotal={financeiroTotal} /></Drawer>
         <Drawer id="ADMIN" title="ADMIN MASTER" color="bg-zinc-900" icon={ShieldCheck} noPadding><AdminDashboard /></Drawer>
       </div>
     </div>
@@ -253,29 +289,8 @@ const BillingContent = () => {
   );
 };
 
-const BudgetContent = ({ financeiroTotal }: any) => (
-  <div className="space-y-8 p-2">
-    <div className="p-12 bg-emerald-600 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
-      <DollarSign size={120} className="absolute -bottom-8 -right-8 opacity-10" />
-      <span className="text-[11px] font-black uppercase opacity-60 mb-3 block">Venda Sugerida Hub</span>
-      <h3 className="text-6xl font-black italic">R$ {financeiroTotal.finalPrice?.toLocaleString('pt-BR')}</h3>
-    </div>
-    <div className="grid grid-cols-2 gap-5">
-       <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl">
-          <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block mb-2">Lucro</span>
-          <p className="text-3xl font-black italic text-zinc-900">R$ {financeiroTotal.profit?.toLocaleString('pt-BR')}</p>
-       </div>
-       <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl">
-          <span className="text-[10px] font-black uppercase text-zinc-400 tracking-widest block mb-2">Margem</span>
-          <p className="text-3xl font-black italic text-emerald-600">{financeiroTotal.margin?.toFixed(1)}%</p>
-       </div>
-    </div>
-    <button className="w-full py-6 bg-zinc-900 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest shadow-2xl flex items-center justify-center gap-4"><Share2 size={24}/> Exportar Proposta</button>
-  </div>
-);
-
 const CutPlanContent = ({ activeProject }: any) => (
-  <div className="space-y-6 p-2">
+  <div className="space-y-6 p-2 text-zinc-800">
     <div className="p-10 bg-blue-600 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
       <div className="flex justify-between items-start">
         <div className="space-y-2">
