@@ -5,35 +5,45 @@ export enum MessageType {
   SYSTEM = 'system'
 }
 
-export type YaraPlan = 'free' | 'pro' | 'studio' | 'enterprise';
+// Added YaraPlan type used in store
+export type YaraPlan = 'BASIC' | 'PRO' | 'STUDIO' | 'ENTERPRISE';
 
-export interface UserProfile {
+// Added CreditTransaction interface used in store
+export interface CreditTransaction {
   id: string;
-  email: string;
-  name: string;
-  plan: YaraPlan;
-  credits: number;
+  type: 'topup' | 'consumption';
+  amount: number;
+  description: string;
+  timestamp: string;
+}
+
+// Added Attachment interface used in engine
+export interface Attachment {
+  type: 'image' | 'audio';
+  url?: string;
+  data: string;
+}
+
+export interface Module {
+  id: string;
+  type: string;
+  dimensions: { w: number; h: number; d: number };
+  material: string;
+  finish: string;
 }
 
 export interface RenderVersion {
   version: number;
   timestamp: string;
-  image_url: string;
   faithfulUrl: string;
   decoratedUrl: string;
-  seed: number;
-  locked: boolean;
 }
 
 export interface ProjectData {
   projectId: string;
-  user_id?: string;
   title: string;
   description: string;
-  complexity: number;
-  seed_base: number; // Seed raiz para consistência entre versões
-  version_count: number;
-  max_free_versions: number;
+  complexity: number; // Added complexity property to resolve error in budgetEngine.ts
   environment: {
     width: number;
     height: number;
@@ -41,10 +51,6 @@ export interface ProjectData {
   };
   modules: Module[];
   status: 'draft' | 'validated' | 'LOCKED' | 'production';
-  dna_locked?: {
-    modules: Module[];
-    environment: any;
-  };
   currentVersion: number;
   renderHistory: RenderVersion[];
   validation: {
@@ -59,14 +65,6 @@ export interface ProjectData {
     faithfulUrl?: string;
     decoratedUrl?: string;
   };
-}
-
-export interface Module {
-  id: string;
-  type: string;
-  dimensions: { w: number; h: number; d: number };
-  material: string;
-  finish: string;
 }
 
 export interface Message {
@@ -85,18 +83,4 @@ export interface Message {
     pricing: 'active' | 'done' | 'error' | false;
     cutPlan: 'active' | 'done' | 'error' | false;
   };
-}
-
-export interface CreditTransaction {
-  id: string;
-  type: 'topup' | 'consumption';
-  amount: number;
-  description: string;
-  timestamp: string;
-}
-
-export interface Attachment {
-  type: 'image' | 'audio';
-  url?: string;
-  data: string;
 }

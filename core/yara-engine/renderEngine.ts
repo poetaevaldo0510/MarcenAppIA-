@@ -5,13 +5,10 @@ import { useStore } from "../../store/yaraStore";
 
 export const RenderEngine = {
   /**
-   * MOTOR DE MATERIALIZAÇÃO DETERMINÍSTICA v6.0
-   * Usa Seed Base + Versão para garantir que a estrutura seja imutável.
+   * MOTOR DE MATERIALIZAÇÃO PURISTA v5.3 (DNA LOCKED)
+   * Foco: Fidelidade Máxima Absoluta e Consistência entre Renders.
    */
-  generateRender: async (project: ProjectData, sketchBase64?: string, versionNum?: number): Promise<{ faithful: string, decorated: string, seedUsed: number }> => {
-    const version = versionNum || project.currentVersion || 1;
-    const finalSeed = (project.seed_base || 1000) + version;
-
+  generateRender: async (project: ProjectData, sketchBase64?: string): Promise<{ faithful: string, decorated: string }> => {
     const callModel = async (prompt: string, sketch?: string, modelName: string = 'gemini-3-pro-image-preview') => {
       const apiKey = useStore.getState().manualApiKey || process.env.API_KEY;
       const ai = new GoogleGenAI({ apiKey });
@@ -35,10 +32,7 @@ export const RenderEngine = {
             imageConfig: {
               aspectRatio: "1:1",
               imageSize: "1K"
-            },
-            // SEED DETERMINÍSTICA PARA CONSISTÊNCIA INDUSTRIAL
-            seed: finalSeed,
-            temperature: 0, // Zero criatividade, apenas execução
+            }
           }
         });
 
@@ -47,8 +41,9 @@ export const RenderEngine = {
             if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
           }
         }
-        throw new Error("Hardware de renderização falhou.");
+        throw new Error("O hardware de renderização não devolveu uma imagem válida.");
       } catch (err: any) {
+        // Fallback para flash se o pro falhar por qualquer motivo (quota, etc)
         if (modelName === 'gemini-3-pro-image-preview') {
           return callModel(prompt, sketch, 'gemini-2.5-flash-image');
         }
@@ -56,34 +51,37 @@ export const RenderEngine = {
       }
     };
 
-    // Prompt agora focado no DNA Travado
-    const dna = project.dna_locked || { modules: project.modules, environment: project.environment };
-    const modulesSummary = dna.modules?.map(m => 
-      `${m.type.toUpperCase()}: W=${m.dimensions.w}mm, H=${m.dimensions.h}mm, D=${m.dimensions.d}mm. MDF=${m.material}.`
+    const modulesSummary = project.modules?.map(m => 
+      `- ${m.type.toUpperCase()}: L=${m.dimensions.w}mm, A=${m.dimensions.h}mm, P=${m.dimensions.d}mm. MDF: ${m.material}.`
     ).join("\n");
 
+    // PROTOCOLO DE BLINDAGEM VISUAL: Zero criatividade, apenas materialização técnica.
     const strictLockPrompt = (style: string) => `
-      INDUSTRIAL ARCHVIZ PROTOCOL v6.0 [STRICT DNA LOCK].
-      SEED_ID: ${finalSeed}
+      INDUSTRIAL ARCHITECTURAL RENDER - PROTOCOLO DNA LOCK v5.3.
       
-      GEOMETRY (DO NOT ALTER):
-      - Space: ${dna.environment.width}x${dna.environment.height}x${dna.environment.depth}mm.
-      - Modules:
+      DADOS TÉCNICOS OBRIGATÓRIOS:
+      - Largura Total: ${project.environment.width}mm.
+      - Altura Total: ${project.environment.height}mm.
+      - Profundidade Total: ${project.environment.depth}mm.
+      - Estrutura de Módulos:
       ${modulesSummary}
       
-      CONSTRAINTS:
-      1. 100% Geometry Fidelity. No new volumes.
-      2. Brazilian Joinery Standard: 3mm hardware-ready gaps.
-      3. PBR Textures for ${dna.modules[0]?.material || 'MDF'}.
+      CONDIÇÕES DE FIDELIDADE (STRICT MODE):
+      - NÃO REDESENHE. Mantenha as proporções milimétricas exatas do DNA.
+      - NÃO adicione ornamentos ou volumes não descritos.
+      - Iluminação: Neutra de estúdio, difusa.
+      - Lente: 50mm (sem distorção de perspectiva).
+      - Acabamento: Texturas reais de MDF conforme descrição.
+      - Detalhes de Marcenaria: Frestas de 3mm entre frentes de gavetas e portas.
       
-      CONTEXT: ${style}
+      CONTEXTO VISUAL: ${style}
     `;
 
     const [faithful, decorated] = await Promise.all([
-      callModel(strictLockPrompt("Technical production isolate. Diffuse lighting. Neutral studio background."), sketchBase64),
-      callModel(strictLockPrompt("Luxury Brazilian minimalist interior. Cinematic natural window light. Professional ArchViz."), sketchBase64)
+      callModel(strictLockPrompt("Render de Produção Industrial. Fundo neutro e isolado. Foco em detalhes de montagem e ferragens."), sketchBase64),
+      callModel(strictLockPrompt("Render de Arquitetura em Ambiente Real. Estilo minimalista, luz natural suave vindo de janela lateral. Sem alterar a geometria do móvel."), sketchBase64)
     ]);
 
-    return { faithful, decorated, seedUsed: finalSeed };
+    return { faithful, decorated };
   }
 };

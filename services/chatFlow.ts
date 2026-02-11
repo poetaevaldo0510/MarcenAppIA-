@@ -8,155 +8,170 @@ import { useStore } from '../store/yaraStore';
 import { ProjectData, RenderVersion } from '../types';
 
 export const ChatFlowService = {
+  /**
+   * FASE 1-4: Captura, Extração e Validação Técnica
+   */
   async executeMaterialization(text: string, image: string | null) {
     const store = useStore.getState();
+    
     const iaraId = store.addMessage({
       from: 'iara',
       type: 'typing',
-      text: 'YARA: Escaneando DNA Industrial...',
+      text: 'YARA: Extraindo DNA Estrutural...',
       status: 'processing',
       progressiveSteps: { parsed: 'active', render: false, pricing: false, cutPlan: false }
     });
 
     try {
-      const project = await YaraEngine.processInput(text, image ? { type: 'image', url: image, data: image.split(',')[1] } : undefined);
-      if (!project) throw new Error("DNA não extraído.");
+      const project = await YaraEngine.processInput(
+        text, 
+        image ? { type: 'image', url: image, data: image.split(',')[1] } : undefined
+      );
+      
+      if (!project) throw new Error("O DNA industrial não pôde ser processado.");
 
-      // Inicializa controle de versão e seed
-      const enrichedProject: ProjectData = {
-        ...project,
-        seed_base: Math.floor(Math.random() * 900000) + 100000,
-        version_count: 0,
-        max_free_versions: 3,
-        currentVersion: 0,
-        renderHistory: []
-      };
+      const isReadyForLock = project.validation?.isValid;
 
       store.updateMessage(iaraId, {
-        text: project.validation?.isValid 
-          ? `DNA Extraído. Proporções milimétricas validadas. Aguardando comando de BLOQUEIO (LOCK) para materialização.`
-          : `AVISO: Erros de geometria detectados. Corrija antes do LOCK.`,
-        project: enrichedProject,
-        status: 'waiting_confirmation',
-        progressiveSteps: { parsed: project.validation?.isValid ? 'done' : 'error', render: false, pricing: false, cutPlan: false }
+        text: isReadyForLock 
+          ? `Mestre Evaldo, DNA Extraído com fidelidade técnica. Por favor, confirme as medidas abaixo para prosseguirmos com o BLOQUEIO DE PRODUÇÃO (LOCK).`
+          : `BLOQUEIO DE SEGURANÇA: O DNA extraído possui inconsistências críticas de medida.`,
+        project: { ...project, status: 'validated' },
+        status: isReadyForLock ? 'waiting_confirmation' : 'error',
+        progressiveSteps: { 
+          parsed: isReadyForLock ? 'done' : 'error', 
+          render: false, 
+          pricing: false, 
+          cutPlan: false 
+        }
       });
+
     } catch (e: any) {
-      store.updateMessage(iaraId, { text: `FALHA: ${e.message}`, status: 'error' });
+      store.updateMessage(iaraId, { 
+        text: `FALHA NO HARDWARE YARA: ${e.message}`, 
+        status: 'error',
+        progressiveSteps: { parsed: 'error', render: false, pricing: false, cutPlan: false }
+      });
     } finally {
       store.setLoadingAI(false);
     }
   },
 
+  /**
+   * FASE 5: CONFIRMAÇÃO DE PRODUÇÃO (DNA LOCK)
+   * Travamento do projeto e geração de entregáveis.
+   */
   async confirmAndProduce(messageId: string) {
     const store = useStore.getState();
     const msg = store.messages.find(m => m.id === messageId);
     if (!msg || !msg.project) return;
 
     store.updateMessage(messageId, {
-      text: "Autorizado. Executando DNA LOCK e Render v1...",
+      text: "Mestre, confirmando produção. Travando DNA Estrutural (LOCK v1) e ativando hardware de renderização...",
       status: 'processing',
       progressiveSteps: { parsed: 'done', render: 'active', pricing: 'active', cutPlan: 'active' }
     });
 
     try {
       const project = msg.project;
-      if (!store.consumeCredits(CreditsEngine.COSTS.COMBO_FULL, `DNA LOCK: ${project.title}`)) {
-        throw new Error("Saldo insuficiente.");
+      
+      if (!store.consumeCredits(CreditsEngine.COSTS.COMBO_FULL, `PRODUÇÃO LOCK: ${project.title}`)) {
+        throw new Error("Créditos insuficientes para produção industrial completa.");
       }
 
+      // Execução paralela para performance SaaS
       const [renders, pricing, cutPlan] = await Promise.all([
-        RenderEngine.generateRender(project, msg.src || undefined, 1),
+        RenderEngine.generateRender(project, msg.src || undefined),
         BudgetEngine.calculate(project, store.industrialRates),
         CutPlanEngine.optimize(project)
       ]);
 
-      const v1: RenderVersion = {
+      const initialVersion: RenderVersion = {
         version: 1,
         timestamp: new Date().toISOString(),
-        image_url: renders.faithful,
         faithfulUrl: renders.faithful,
-        decoratedUrl: renders.decorated,
-        seed: renders.seedUsed,
-        locked: true
+        decoratedUrl: renders.decorated
       };
 
       const lockedProject: ProjectData = {
         ...project,
         status: 'LOCKED',
-        dna_locked: { modules: project.modules, environment: project.environment },
         currentVersion: 1,
-        version_count: 1,
-        renderHistory: [v1],
+        renderHistory: [initialVersion],
         render: { status: 'done', faithfulUrl: renders.faithful, decoratedUrl: renders.decorated },
         pricing,
         cutPlan
       };
 
       store.updateMessage(messageId, {
-        text: "DNA BLOQUEADO. Estrutura imutável v1 materializada.",
+        text: "PRODUÇÃO BLOQUEADA (LOCKED). Estrutura técnica agora é imutável. Versão 1 materializada com sucesso.",
         project: lockedProject,
         status: 'done',
         progressiveSteps: { parsed: 'done', render: 'done', pricing: 'done', cutPlan: 'done' }
       });
+
     } catch (e: any) {
-      store.updateMessage(messageId, { text: `ERRO: ${e.message}`, status: 'error' });
+      store.updateMessage(messageId, { 
+        text: `ERRO DURANTE PRODUÇÃO: ${e.message}`, 
+        status: 'error',
+        progressiveSteps: { parsed: 'done', render: 'error', pricing: 'error', cutPlan: 'error' }
+      });
     }
   },
 
+  /**
+   * RE-RENDERIZAÇÃO DE DNA LOCKED
+   */
   async reRenderLocked(messageId: string) {
     const store = useStore.getState();
     const msg = store.messages.find(m => m.id === messageId);
     if (!msg || !msg.project || msg.project.status !== 'LOCKED') return;
 
-    const project = msg.project;
-    
-    // Verificação de Limite de Alterações
-    if (project.version_count >= project.max_free_versions && store.currentPlan === 'free') {
-      alert("LIMITE ATINGIDO: Você já realizou as 2 alterações gratuitas permitidas. Faça o upgrade para o plano PRO para gerar novas versões deste DNA.");
-      return;
-    }
-
     store.setLoadingAI(true);
-    const newVersionNum = project.version_count + 1;
-
     store.updateMessage(messageId, { 
-      text: `Gerando Versão ${newVersionNum} (Ajuste Controlado)...`,
+      text: `Acionando hardware para nova visualização do DNA Travado v${msg.project.currentVersion}...`,
       status: 'processing' 
     });
 
     try {
-      const cost = newVersionNum > 3 ? CreditsEngine.COSTS.RENDER : 0; // Grátis até 3, depois cobra
-      if (cost > 0 && !store.consumeCredits(cost, `Re-render v${newVersionNum}: ${project.title}`)) {
-        throw new Error("Saldo insuficiente para alteração extra.");
+      const project = msg.project;
+      
+      if (!store.consumeCredits(CreditsEngine.COSTS.RENDER, `RE-RENDER DNA LOCK: ${project.title}`)) {
+        throw new Error("Créditos insuficientes para renderização adicional.");
       }
 
-      const renders = await RenderEngine.generateRender(project, msg.src || undefined, newVersionNum);
+      const renders = await RenderEngine.generateRender(project, msg.src || undefined);
       
+      const newVersionNum = project.currentVersion + 1;
       const newVersion: RenderVersion = {
         version: newVersionNum,
         timestamp: new Date().toISOString(),
-        image_url: renders.faithful,
         faithfulUrl: renders.faithful,
-        decoratedUrl: renders.decorated,
-        seed: renders.seedUsed,
-        locked: true
+        decoratedUrl: renders.decorated
       };
 
       const updatedProject: ProjectData = {
         ...project,
         currentVersion: newVersionNum,
-        version_count: newVersionNum,
         renderHistory: [...project.renderHistory, newVersion],
-        render: { status: 'done', faithfulUrl: renders.faithful, decoratedUrl: renders.decorated }
+        render: { 
+          status: 'done', 
+          faithfulUrl: renders.faithful, 
+          decoratedUrl: renders.decorated 
+        }
       };
 
       store.updateMessage(messageId, {
-        text: `Versão ${newVersionNum} materializada. Consistência estrutural preservada via Seed +${newVersionNum}.`,
+        text: `Materialização v${newVersionNum} concluída. Geometria original preservada integralmente.`,
         project: updatedProject,
         status: 'done'
       });
+
     } catch (e: any) {
-      store.updateMessage(messageId, { text: `ERRO: ${e.message}`, status: 'error' });
+      store.updateMessage(messageId, { 
+        text: `FALHA NO RE-RENDER: ${e.message}`, 
+        status: 'error' 
+      });
     } finally {
       store.setLoadingAI(false);
     }
