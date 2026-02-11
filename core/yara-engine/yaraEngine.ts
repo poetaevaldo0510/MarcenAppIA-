@@ -5,41 +5,32 @@ import { IARA_SYSTEM_PROMPT } from '../../constants';
 import { useStore } from "../../store/yaraStore";
 
 export const YaraEngine = {
-  /**
-   * Inicializa o hardware GenAI com a melhor chave disponível.
-   */
-  getAi: (providedKey?: string) => {
-    const apiKey = providedKey || useStore.getState().manualApiKey || process.env.API_KEY;
-    if (!apiKey) throw new Error("Chave API não configurada no hardware.");
+  getAi: () => {
+    const apiKey = useStore.getState().manualApiKey || process.env.API_KEY;
+    if (!apiKey) throw new Error("Chave API ausente no hardware.");
     return new GoogleGenAI({ apiKey });
   },
 
-  /**
-   * Valida a integridade da conexão com o Hub Industrial.
-   */
   testConnection: async (keyToTest?: string): Promise<boolean> => {
     try {
-      const ai = YaraEngine.getAi(keyToTest);
-      // Teste leve usando o modelo flash
+      const apiKey = keyToTest || useStore.getState().manualApiKey || process.env.API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [{ text: 'HEALTH_CHECK' }],
+        contents: [{ text: 'PING' }],
         config: { maxOutputTokens: 2 }
       });
       return !!response.text;
-    } catch (e: any) {
-      console.error("Hardware test failed:", e);
-      return false;
-    }
+    } catch (e: any) { return false; }
   },
 
   /**
-   * Processa rascunhos e descrições para extrair o DNA técnico do projeto.
+   * FASE 2 & 3: EXTRAÇÃO TÉCNICA E VALIDAÇÃO GEOMÉTRICA
    */
   processInput: async (text: string, attachment?: Attachment): Promise<ProjectData | null> => {
     try {
       const ai = YaraEngine.getAi();
-      const parts: any[] = [{ text: text || "Analise este rascunho de marcenaria tecnicamente." }];
+      const parts: any[] = [{ text: text || "Analise as medidas e estrutura deste projeto de marcenaria." }];
       
       if (attachment?.data) {
         parts.push({ 
@@ -60,11 +51,23 @@ export const YaraEngine = {
       });
 
       const parsed = JSON.parse(response.text || "{}");
-      const project = parsed.project || parsed;
+      const projectData = parsed.project || parsed;
       
+      // Validação Adicional via Código (Camada de Segurança)
+      const sumModulesW = projectData.modules?.reduce((acc: number, m: any) => acc + (m.dimensions?.w || 0), 0) || 0;
+      const envW = projectData.environment?.width || 0;
+      
+      if (envW > 0 && Math.abs(sumModulesW - envW) > 10) { // Tolerância de 10mm
+        projectData.validation.isValid = false;
+        projectData.validation.alerts.push(`CONFLITO GEOMÉTRICO: A soma dos módulos (${sumModulesW}mm) não bate com a largura total (${envW}mm).`);
+      }
+
+      // Populate complexity with a default value of 5 if not provided by the AI
       return {
-        ...project,
-        projectId: project.projectId || `HUB-${Date.now()}`,
+        ...projectData,
+        complexity: projectData.complexity || 5,
+        projectId: projectData.projectId || `YARA-${Date.now()}`,
+        status: projectData.validation?.isValid ? 'validated' : 'draft',
         render: { status: 'pending' },
         pricing: { status: 'pending' },
         cutPlan: { status: 'pending' }
@@ -72,13 +75,8 @@ export const YaraEngine = {
 
     } catch (e: any) {
       const errorMsg = e.message || JSON.stringify(e);
-      console.error("Yara Engine Error:", errorMsg);
-      
       if (errorMsg.includes("403") || errorMsg.includes("PERMISSION_DENIED")) {
-        throw new Error("PERMISSÃO NEGADA (403): O hardware base foi bloqueado. Por favor, insira sua própria Chave API no Admin.");
-      }
-      if (errorMsg.includes("429")) {
-        throw new Error("LIMITE EXCEDIDO (429): Muitas solicitações ao Hub. Aguarde um momento.");
+        throw new Error("ERRO 403: Hardware Master bloqueado. Ative sua API KEY no painel de Engenharia.");
       }
       throw e;
     }

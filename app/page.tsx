@@ -5,11 +5,12 @@ import {
   Image as LucideImage, Camera, Send, Loader2, Sparkles, Maximize, MapPin,
   Layers, ChevronRight, Scissors, Download, Share2, RotateCcw, Users, Zap,
   Settings, Award, Key, FileJson, Wallet, History, CreditCard, ShoppingCart,
-  MessageSquarePlus, Calendar, TrendingDown, MicOff, Search
+  MessageSquarePlus, Calendar, TrendingDown, MicOff, Search, CheckCircle2, Hammer, LogIn
 } from "lucide-react";
 import { useStore } from "../store/yaraStore";
 import { ChatFlowService } from "../services/chatFlow";
 import { UploadService } from "../services/uploadService";
+import { startYaraVoice } from "../utils/yaraVoice";
 import { CreditsEngine } from "../core/yara-engine/creditsEngine";
 import { LogoSVG, BrandHeading } from "../components/ui/Logo";
 import { Drawer } from "../components/tools/Drawer";
@@ -24,6 +25,7 @@ export default function Workshop() {
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(true); // Mock para fluxo SaaS
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const galInputRef = useRef<HTMLInputElement>(null);
@@ -39,43 +41,37 @@ export default function Workshop() {
       }
     };
     checkKey();
-    const interval = setInterval(checkKey, 10000);
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [store.messages, store.loadingAI]);
 
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.lang = 'pt-BR';
-      recognitionRef.current.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(prev => prev + " " + transcript);
-        setIsListening(false);
-      };
-      recognitionRef.current.onerror = () => setIsListening(false);
-      recognitionRef.current.onend = () => setIsListening(false);
-    }
-  }, []);
-
   const toggleVoice = () => {
     if (isListening) {
       recognitionRef.current?.stop();
+      setIsListening(false);
     } else {
       setIsListening(true);
-      recognitionRef.current?.start();
+      recognitionRef.current = startYaraVoice(
+        (text, isFinal) => {
+          setInput(text);
+          if (isFinal) {
+            setIsListening(false);
+          }
+        },
+        (err) => {
+          console.error(err);
+          setIsListening(false);
+        }
+      );
     }
   };
 
   const handlePipeline = async (txt: string, img: string | null = null) => {
-    if (!store.activeClientId) return alert("Selecione um cliente para prosseguir.");
+    if (!store.activeClientId) return alert("Selecione um lead para prosseguir.");
 
-    const finalTxt = txt.trim() || (img ? "Analise este rascunho/foto tecnicamente." : "");
+    const finalTxt = txt.trim() || (img ? "Analise este rascunho." : "");
     if (!finalTxt && !img) return;
 
     store.addMessage({ 
@@ -116,6 +112,23 @@ export default function Workshop() {
 
   const financeiroTotal = useMemo(() => activeProject?.pricing || { finalPrice: 0, profit: 0, margin: 0, chapas: 0 }, [activeProject]);
 
+  if (!isLoggedIn) return (
+    <div className="h-screen bg-[#09090b] flex items-center justify-center p-6">
+      <div className="w-full max-w-md bg-white rounded-[3rem] p-10 space-y-8 shadow-2xl animate-in zoom-in-95">
+        <div className="flex flex-col items-center gap-4">
+          <LogoSVG size={80} />
+          <div className="text-center">
+            <h2 className="text-2xl font-black italic text-zinc-900">MarcenApp Pro</h2>
+            <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Acesse seu Hub Industrial</p>
+          </div>
+        </div>
+        <button onClick={() => setIsLoggedIn(true)} className="w-full py-5 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
+          <LogIn size={20} /> Entrar no Workshop
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-[100dvh] bg-[#09090b] font-sans overflow-hidden">
       <nav className={`fixed inset-y-0 left-0 z-[90000] w-72 bg-[#09090b] transition-transform duration-500 border-r border-white/5 ${sidebar ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static`}>
@@ -152,7 +165,7 @@ export default function Workshop() {
       </nav>
 
       <div className="flex-1 flex flex-col relative h-[100dvh] bg-white lg:rounded-l-[3.5rem] shadow-2xl overflow-hidden">
-        <header className="bg-[#09090b] pt-safe py-3 px-6 flex items-center justify-between text-white shrink-0 z-50 transition-all duration-300">
+        <header className="bg-[#09090b] pt-safe py-3 px-6 flex items-center justify-between text-white shrink-0 z-50 transition-all duration-300 border-b border-white/5">
           <div className="flex items-center gap-4 flex-1">
             {!sidebar && <button onClick={() => setSidebar(true)} className="lg:hidden p-1 text-amber-500 active:scale-90 transition-transform"><Menu size={32} /></button>}
             {showSearch ? (
@@ -198,10 +211,10 @@ export default function Workshop() {
                <LogoSVG size={100} />
                <div className="space-y-1">
                  <p className="text-[12px] font-black uppercase tracking-[0.2em] text-zinc-900">
-                   {store.searchQuery ? "Nenhum resultado para a busca" : "Oficina Digital YARA v3.83"}
+                   SaaS Industrial v6.0
                  </p>
                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                   {store.searchQuery ? "Tente um termo diferente." : "Inicie um projeto agora. O hardware industrial está operando."}
+                   Hardware de Renderização e Persistência Supabase Ativos.
                  </p>
                </div>
             </div>
@@ -234,15 +247,15 @@ export default function Workshop() {
                 <button onClick={() => galInputRef.current?.click()} className="p-3 text-slate-400 hover:text-amber-500 active:scale-90 transition-all"><LucideImage size={22}/></button>
                 <button onClick={() => camInputRef.current?.click()} className="p-3 text-slate-400 hover:text-amber-500 active:scale-90 transition-all"><Camera size={22}/></button>
                 <input 
-                  placeholder="Instruções para Iara..." 
-                  className="flex-1 bg-transparent px-2 sm:px-4 py-3 sm:py-4 text-sm sm:text-base font-bold outline-none text-zinc-900 placeholder-slate-400" 
+                  placeholder={isListening ? "Ouvindo Mestre..." : "Diga medidas ou envie rascunho"} 
+                  className={`flex-1 bg-transparent px-2 sm:px-4 py-3 sm:py-4 text-sm sm:text-base font-bold outline-none text-zinc-900 placeholder-slate-400 transition-colors ${isListening ? 'text-amber-600 font-black' : ''}`} 
                   value={input} 
                   onChange={e => setInput(e.target.value)} 
                   onKeyDown={(e) => e.key === "Enter" && handlePipeline(input, preview)} 
                 />
                 <button 
                   onClick={toggleVoice} 
-                  className={`p-3 transition-all active:scale-90 ${isListening ? "text-red-500 animate-pulse" : "text-slate-400"}`}
+                  className={`p-3 transition-all active:scale-90 ${isListening ? "text-red-500 animate-pulse" : "text-slate-400 hover:text-amber-500"}`}
                 >
                   {isListening ? <MicOff size={22}/> : <Mic size={22}/>}
                 </button>
@@ -300,11 +313,6 @@ export default function Workshop() {
              />
              <button onClick={(e) => { e.stopPropagation(); store.setPreview(null); }} className="absolute top-4 right-4 p-4 text-white/50 hover:text-amber-500 transition-colors active:scale-90"><X size={32}/></button>
           </div>
-          <div className="mb-safe pb-8 flex gap-4 w-full justify-center">
-            <button onClick={(e) => { e.stopPropagation(); }} className="px-10 py-5 bg-white text-black rounded-full font-black uppercase text-[10px] tracking-widest shadow-2xl flex items-center gap-3 hover:scale-105 active:scale-95 transition-all">
-              <Download size={20}/> Salvar Render 8K
-            </button>
-          </div>
         </div>
       )}
     </div>
@@ -347,14 +355,12 @@ const CutPlanContent = ({ activeProject }: any) => (
         </div>
         <Scissors size={40} className="opacity-20" />
       </div>
-      <p className="mt-4 text-[10px] font-bold text-white/70 uppercase tracking-widest">Aproveitamento Máximo Industrial Yara 1.0</p>
     </div>
     <div className="space-y-3">
       {activeProject?.cutPlan?.boards?.map((board: any, idx: number) => (
         <div key={idx} className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-2" style={{ animationDelay: `${idx * 100}ms` }}>
-          <div className="flex justify-between items-center mb-4">
-             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Chapa #{board.id} - Industrial</p>
-             <span className="text-[9px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full uppercase tracking-widest">2.75x1.84</span>
+          <div className="flex justify-between items-center mb-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+             <p>Chapa #{board.id} - Industrial</p>
           </div>
           <div className="space-y-2">
             {board.items.map((item: any, i: number) => (
@@ -366,12 +372,6 @@ const CutPlanContent = ({ activeProject }: any) => (
           </div>
         </div>
       ))}
-      {!activeProject?.cutPlan?.boards && (
-        <div className="h-40 flex flex-col items-center justify-center text-slate-300 gap-2 opacity-50">
-           <Package size={32} />
-           <p className="text-[10px] font-black uppercase tracking-widest">Nenhum plano gerado</p>
-        </div>
-      )}
     </div>
   </div>
 );
@@ -385,54 +385,18 @@ const BudgetContent = ({ financeiroTotal, activeProject }: any) => (
     </div>
 
     <div className="grid grid-cols-2 gap-3">
-       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-             <TrendingUp size={14} className="text-emerald-500" />
-             <span className="text-[9px] font-black uppercase text-zinc-400 tracking-widest">Lucro</span>
-          </div>
+       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm text-left">
+          <span className="text-[9px] font-black uppercase text-zinc-400 tracking-widest block mb-1">Lucro</span>
           <p className="text-xl font-black italic text-zinc-900 tabular-nums">R$ {financeiroTotal.profit?.toLocaleString('pt-BR')}</p>
        </div>
-       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-             <Award size={14} className="text-blue-500" />
-             <span className="text-[9px] font-black uppercase text-zinc-400 tracking-widest">Margem</span>
-          </div>
+       <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm text-left">
+          <span className="text-[9px] font-black uppercase text-zinc-400 tracking-widest block mb-1">Margem</span>
           <p className="text-xl font-black italic text-zinc-900 tabular-nums">{financeiroTotal.margin?.toFixed(1)}%</p>
        </div>
     </div>
-
-    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-5">
-       <div className="flex justify-between items-center text-[10px] font-black uppercase text-zinc-400 border-b border-slate-50 pb-4">
-          <div className="flex items-center gap-2"><Calendar size={14} /> <span>Produção Hub</span></div>
-          <span className="text-zinc-900 font-black">{activeProject?.pricing?.prazoDias || '--'} Dias</span>
-       </div>
-       <div className="space-y-3">
-         <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Custo Industrial</h4>
-         {activeProject?.pricing?.materials?.map((m: any, i: number) => (
-           <div key={i} className="flex justify-between items-center text-[11px]">
-             <span className="text-slate-500 font-bold uppercase tracking-tight">{m.name}</span>
-             <span className="font-black text-zinc-900 tabular-nums">R$ {m.cost.toLocaleString('pt-BR')}</span>
-           </div>
-         ))}
-         <div className="flex justify-between items-center text-[11px]">
-             <span className="text-slate-500 font-bold uppercase tracking-tight">Mão de Obra Master</span>
-             <span className="font-black text-zinc-900 tabular-nums">R$ {activeProject?.pricing?.labor?.toLocaleString('pt-BR')}</span>
-         </div>
-       </div>
-       <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-             <TrendingDown size={14} className="text-red-500" />
-             <span className="text-[10px] font-black uppercase text-red-500 tracking-widest leading-none">Custo Total</span>
-          </div>
-          <span className="text-lg font-black text-zinc-900 tabular-nums">R$ {activeProject?.pricing?.total?.toLocaleString('pt-BR')}</span>
-       </div>
-    </div>
-
-    <div className="flex flex-col sm:flex-row gap-3">
-       <button className="flex-1 py-5 bg-zinc-900 text-white rounded-[1.5rem] font-black uppercase text-[10px] tracking-[0.2em] shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
-         <Share2 size={16}/> Enviar via WhatsApp
-       </button>
-       <button className="p-5 bg-white border border-slate-100 text-zinc-900 rounded-[1.5rem] shadow-md hover:bg-slate-50 active:scale-95 transition-all flex items-center justify-center"><Download size={20}/></button>
-    </div>
+    
+    <button className="w-full py-5 bg-zinc-900 text-white rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+       <Share2 size={20}/> Gerar Proposta Comercial
+    </button>
   </div>
 );

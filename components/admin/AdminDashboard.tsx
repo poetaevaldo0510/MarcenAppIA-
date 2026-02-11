@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { 
   BarChart3, Key, Terminal, Eye, EyeOff, Save, Activity, 
   RefreshCw, ShieldCheck, Zap, Server, Settings2, DollarSign, Users,
-  CheckCircle2, XCircle, AlertCircle
+  CheckCircle2, XCircle, AlertCircle, ExternalLink, MousePointer2
 } from "lucide-react";
 import { useStore } from "../../store/yaraStore";
 import { YaraEngine } from "../../core/yara-engine/yaraEngine";
@@ -15,10 +15,18 @@ export const AdminDashboard = () => {
   const [tempKey, setTempKey] = useState(store.manualApiKey || "");
   const [isTesting, setIsTesting] = useState(false);
 
+  const handleOpenKeySelector = async () => {
+    if ((window as any).aistudio?.openSelectKey) {
+      await (window as any).aistudio.openSelectKey();
+      // Assume sucesso conforme instruções e atualiza estado
+      store.setKeyStatus('active');
+    }
+  };
+
   const handleSave = () => {
     store.setManualApiKey(tempKey.trim() || null);
     store.setKeyStatus(tempKey.trim() ? 'active' : 'inactive');
-    alert("NÚCLEO ATUALIZADO: O hardware do MarcenApp agora utilizará sua chave master salva.");
+    alert("NÚCLEO ATUALIZADO: Hardware MarcenApp recalibrado.");
   };
 
   const handleTest = async () => {
@@ -30,7 +38,7 @@ export const AdminDashboard = () => {
       alert("CONEXÃO ESTABELECIDA: Hardware Industrial operacional.");
     } else {
       store.setKeyStatus('error');
-      alert("ERRO DE CONEXÃO: Certifique-se de que sua chave possui o faturamento (billing) ativo e acesso à Generative AI.");
+      alert("ERRO: Verifique se sua chave possui faturamento (billing) ativo no Google Cloud Console.");
     }
   };
 
@@ -54,19 +62,22 @@ export const AdminDashboard = () => {
             <div className="bg-white p-8 sm:p-12 rounded-[3rem] border border-zinc-100 shadow-xl space-y-10 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-5"><Zap size={120} /></div>
               
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                   <div className="p-4 bg-amber-500/10 text-amber-600 rounded-2xl"><Key size={32} /></div>
-                   <div>
-                     <h3 className="text-2xl font-black italic">Engenharia de Hardware</h3>
-                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Configure sua Chave API Master (Google Cloud)</p>
-                   </div>
-                </div>
-              </div>
-
               <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 pb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 bg-amber-500/10 text-amber-600 rounded-2xl"><ShieldCheck size={32} /></div>
+                    <div>
+                      <h3 className="text-2xl font-black italic">Seletor Master</h3>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Ative o faturamento industrial</p>
+                    </div>
+                  </div>
+                  <button onClick={handleOpenKeySelector} className="py-4 px-8 bg-amber-600 text-black rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-amber-500 transition-all shadow-lg active:scale-95">
+                    <MousePointer2 size={16}/> Selecionar Chave Paga
+                  </button>
+                </div>
+
                 <div className="relative group">
-                  <label className="text-[9px] font-black uppercase text-zinc-400 mb-2 block ml-2">GOOGLE API KEY</label>
+                  <label className="text-[9px] font-black uppercase text-zinc-400 mb-2 block ml-2">CHAVE API MANUAL</label>
                   <input 
                     type={showKey ? "text" : "password"}
                     value={tempKey}
@@ -88,66 +99,42 @@ export const AdminDashboard = () => {
                   </button>
                 </div>
 
-                <div className={`p-6 rounded-[2rem] border flex items-center justify-between transition-colors ${
+                <div className={`p-6 rounded-[2rem] border flex items-center justify-between ${
                   store.keyStatus === 'active' ? 'bg-emerald-50 border-emerald-100' : 
-                  store.keyStatus === 'error' ? 'bg-red-50 border-red-100' : 
-                  'bg-zinc-50 border-zinc-200'
+                  store.keyStatus === 'error' ? 'bg-red-50 border-red-100' : 'bg-zinc-50'
                 }`}>
                    <div className="flex items-center gap-4">
                       <div className={`w-3 h-3 rounded-full ${
-                        store.keyStatus === 'active' ? 'bg-emerald-500' : 
-                        store.keyStatus === 'error' ? 'bg-red-500' : 
-                        'bg-zinc-300'
+                        store.keyStatus === 'active' ? 'bg-emerald-500' : store.keyStatus === 'error' ? 'bg-red-500' : 'bg-zinc-300'
                       } animate-pulse`} />
                       <div className="space-y-0.5">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-900">
-                          Status do Motor: {store.keyStatus.toUpperCase()}
-                        </p>
-                        <p className="text-[9px] font-bold text-zinc-400 uppercase">
-                          {store.manualApiKey ? 'Utilizando Chave Manual Ativa' : 'Utilizando Hardware Base Nativo'}
-                        </p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-900">Hardware: {store.manualApiKey ? 'MANUAL' : 'NATIVO'}</p>
+                        <p className="text-[9px] font-bold text-zinc-400 uppercase">Status do Núcleo Yara v3.85</p>
                       </div>
                    </div>
-                   {store.keyStatus === 'active' ? <CheckCircle2 size={24} className="text-emerald-500" /> : 
-                    store.keyStatus === 'error' ? <XCircle size={24} className="text-red-500" /> :
-                    <Server size={24} className="text-zinc-300" />}
+                   {store.keyStatus === 'active' ? <CheckCircle2 size={24} className="text-emerald-500" /> : <Server size={24} className="text-zinc-300" />}
                 </div>
               </div>
             </div>
 
             <div className="p-8 bg-zinc-900 text-zinc-400 rounded-[2.5rem] space-y-4 shadow-2xl">
                <div className="flex items-center gap-3 text-amber-500 mb-2">
-                 <ShieldCheck size={20} />
-                 <span className="text-[10px] font-black uppercase tracking-widest leading-none">Protocolo de Segurança Hub</span>
+                 <AlertCircle size={20} />
+                 <span className="text-[10px] font-black uppercase tracking-widest leading-none">Aviso de Faturamento (Billing)</span>
                </div>
-               <p className="text-[11px] leading-relaxed italic">
-                 Para liberar o <strong>Render 8K (Engine Pro)</strong>, sua chave deve estar vinculada a um projeto com faturamento ativo no Google Cloud. O MarcenApp nunca compartilha sua chave; ela permanece salva exclusivamente no seu dispositivo.
+               <p className="text-[11px] leading-relaxed italic opacity-80">
+                 Os modelos <strong>Gemini 3 Pro</strong> e <strong>Render 8K</strong> exigem que sua API Key esteja vinculada a um projeto com faturamento ativo. Sem isso, você receberá erro de permissão (403).
                </p>
-               <div className="pt-2 flex items-center gap-2 text-[9px] font-bold text-zinc-500">
-                 <AlertCircle size={12} />
-                 <span>Erros 403 (PERMISSION_DENIED) indicam falta de cota ou billing inativo.</span>
-               </div>
+               <a 
+                 href="https://ai.google.dev/gemini-api/docs/billing" 
+                 target="_blank" 
+                 rel="noopener noreferrer"
+                 className="flex items-center gap-2 text-amber-500 text-[10px] font-black uppercase tracking-widest pt-2 hover:underline"
+               >
+                 Documentação de Faturamento Google <ExternalLink size={14}/>
+               </a>
             </div>
           </div>
-        )}
-
-        {activeTab === 'OVERVIEW' && (
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
-              {[
-                { label: 'Projetos Concluídos', value: store.messages.filter(m => m.project).length, icon: Zap, color: 'text-amber-500' },
-                { label: 'Créditos Disponíveis', value: store.credits, icon: DollarSign, color: 'text-emerald-500' },
-                { label: 'Leads no Pipeline', value: store.clients.length, icon: Users, color: 'text-blue-500' },
-                { label: 'Eficiência de Hardware', value: '98.7%', icon: Activity, color: 'text-purple-500' },
-              ].map((stat, i) => (
-                <div key={i} className="bg-white p-8 rounded-[2.5rem] border border-zinc-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-                   <div className="space-y-1">
-                      <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">{stat.label}</p>
-                      <p className="text-3xl font-black italic text-zinc-900">{stat.value}</p>
-                   </div>
-                   <stat.icon size={40} className={stat.color} />
-                </div>
-              ))}
-           </div>
         )}
       </div>
     </div>
