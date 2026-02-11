@@ -2,10 +2,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { YaraPlan, CreditTransaction, Message, ProjectData } from "../types";
+import { supabase } from "../lib/supabase";
 
 interface MarcenaState {
   isReady: boolean;
-  isAdminLoggedIn: boolean;
+  user: any | null;
   activeModal: string | null;
   activeClientId: string | null;
   clients: any[];
@@ -15,102 +16,107 @@ interface MarcenaState {
   industrialRates: { mdf: number; markup: number };
   selectedImage: string | null;
   loadingAI: boolean;
-  hasKey: boolean;
-  keyStatus: 'active' | 'inactive' | 'error';
-  manualApiKey: string | null;
-
-  // Sistema de Créditos
   credits: number;
   currentPlan: YaraPlan;
-  transactions: CreditTransaction[];
+  manualApiKey: string | null;
+  keyStatus: 'inactive' | 'active' | 'error';
 
   // Actions
   setReady: (val: boolean) => void;
-  setAdmin: (val: boolean) => void;
+  setUser: (user: any) => void;
   setModal: (id: string | null) => void;
   setClient: (id: string | null) => void;
   addClient: (name: string) => void;
-  setSearchQuery: (query: string) => void;
+  setManualApiKey: (key: string | null) => void;
+  setKeyStatus: (status: 'inactive' | 'active' | 'error') => void;
   
-  startNewConversation: () => string;
+  syncUserFromDB: () => Promise<void>;
   addMessage: (msg: Partial<Message>) => string;
   updateMessage: (id: string, payload: Partial<Message>) => void;
   deleteMessage: (id: string) => void;
-  
-  updateRates: (rates: { mdf?: number; markup?: number }) => void;
-  setPreview: (url: string | null) => void;
-  setLoadingAI: (val: boolean) => void;
-  setHasKey: (val: boolean) => void;
-  setKeyStatus: (status: 'active' | 'inactive' | 'error') => void;
-  setManualApiKey: (key: string | null) => void;
-
-  consumeCredits: (amount: number, description: string) => boolean;
-  addCredits: (amount: number, description: string) => void;
+  consumeCredits: (amount: number, description: string) => Promise<boolean>;
   changePlan: (plan: YaraPlan) => void;
   
   resetStore: () => void;
-  exportProject: (id: string) => void;
 }
 
 export const useStore = create<MarcenaState>()(
   persist(
     (set, get) => ({
       isReady: false,
-      isAdminLoggedIn: true,
+      user: null,
       activeModal: null,
       activeClientId: '1',
-      clients: [{ id: '1', name: 'Evaldo Master Pro' }],
+      clients: [{ id: '1', name: 'Workshop Master' }],
       messages: [],
       searchQuery: "",
       conversationId: null,
       industrialRates: { mdf: 440, markup: 2.2 },
       selectedImage: null,
       loadingAI: false,
-      hasKey: false,
-      keyStatus: 'inactive',
+      credits: 0,
+      currentPlan: 'free',
       manualApiKey: null,
-
-      credits: 50,
-      currentPlan: 'BASIC',
-      transactions: [{
-        id: 'welcome',
-        type: 'topup',
-        amount: 50,
-        description: 'Créditos de Boas-vindas Hub',
-        timestamp: new Date().toISOString()
-      }],
+      keyStatus: 'inactive',
 
       setReady: (val) => set({ isReady: val }),
-      setAdmin: (val) => set({ isAdminLoggedIn: val }),
+      setUser: (user) => set({ user }),
       setModal: (id) => set({ activeModal: id }),
-      setSearchQuery: (query) => set({ searchQuery: query }),
-      setClient: (id) => {
-        const currentConvId = crypto.randomUUID();
-        set({ activeClientId: id, conversationId: currentConvId });
+      setClient: (id) => set({ activeClientId: id, conversationId: crypto.randomUUID() }),
+      setManualApiKey: (manualApiKey) => set({ manualApiKey }),
+      setKeyStatus: (keyStatus) => set({ keyStatus }),
+      
+      syncUserFromDB: async () => {
+        const currentUser = get().user;
+        if (!currentUser) return;
+        
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', currentUser.id)
+            .single();
+            
+          if (data) {
+            set({ credits: data.credits, currentPlan: data.plan });
+          }
+        } catch (e) {
+          console.warn("Supabase Sync indisponível.");
+        }
       },
-      addClient: (name) => set((state) => {
-        const id = Date.now().toString();
-        const convId = crypto.randomUUID();
-        return { 
-          clients: [...state.clients, { id, name }], 
-          activeClientId: id,
-          conversationId: convId
-        };
-      }),
 
-      startNewConversation: () => {
-        const id = crypto.randomUUID();
-        set({ conversationId: id, messages: [] });
-        return id;
+      consumeCredits: async (amount, description) => {
+        const userId = get().user?.id;
+        if (!userId) return false;
+
+        try {
+          const { data: user } = await supabase.from('users').select('credits').eq('id', userId).single();
+          if (!user || user.credits < amount) return false;
+
+          const { error } = await supabase.from('users').update({ credits: user.credits - amount }).eq('id', userId);
+          if (error) return false;
+
+          await supabase.from('credits_log').insert({ user_id: userId, amount: -amount, description });
+          set({ credits: user.credits - amount });
+          return true;
+        } catch (e) {
+          // Fallback offline
+          const newCredits = Math.max(0, get().credits - amount);
+          set({ credits: newCredits });
+          return true;
+        }
       },
+
+      addClient: (name) => set((state) => ({ 
+        clients: [...state.clients, { id: Date.now().toString(), name }],
+        activeClientId: Date.now().toString()
+      })),
 
       addMessage: (msg) => {
         const id = msg.id || crypto.randomUUID();
-        const convId = get().conversationId || crypto.randomUUID();
-        
         const newMessage: Message = {
           id,
-          conversationId: convId,
+          conversationId: get().conversationId || crypto.randomUUID(),
           from: msg.from || 'user',
           type: msg.type || 'text',
           text: msg.text || '',
@@ -119,7 +125,6 @@ export const useStore = create<MarcenaState>()(
           progressiveSteps: msg.progressiveSteps || { parsed: false, render: false, pricing: false, cutPlan: false },
           ...msg
         };
-        
         set((state) => ({ messages: [...state.messages, newMessage] }));
         return id;
       },
@@ -129,69 +134,14 @@ export const useStore = create<MarcenaState>()(
       })),
 
       deleteMessage: (id) => set((state) => ({
-        messages: state.messages.filter(m => m.id !== id)
+        messages: state.messages.filter((m) => m.id !== id)
       })),
 
-      updateRates: (rates) => set((state) => ({ industrialRates: { ...state.industrialRates, ...rates } })),
-      setPreview: (url) => set({ selectedImage: url }),
-      setLoadingAI: (val) => set({ loadingAI: val }),
-      setHasKey: (val) => set({ hasKey: val }),
-      setKeyStatus: (status) => set({ keyStatus: status }),
-      setManualApiKey: (key) => set({ manualApiKey: key, hasKey: !!key }),
-
-      consumeCredits: (amount, description) => {
-        const current = get().credits;
-        if (current < amount) return false;
-        
-        const newTransaction: CreditTransaction = {
-          id: `tx-${Date.now()}`,
-          type: 'consumption',
-          amount,
-          description,
-          timestamp: new Date().toISOString()
-        };
-
-        set((state) => ({
-          credits: state.credits - amount,
-          transactions: [newTransaction, ...state.transactions]
-        }));
-        return true;
-      },
-
-      addCredits: (amount, description) => {
-        const newTransaction: CreditTransaction = {
-          id: `tx-${Date.now()}`,
-          type: 'topup',
-          amount,
-          description,
-          timestamp: new Date().toISOString()
-        };
-        set((state) => ({
-          credits: state.credits + amount,
-          transactions: [newTransaction, ...state.transactions]
-        }));
-      },
-
       changePlan: (plan) => set({ currentPlan: plan }),
-      
-      resetStore: () => {
-        if(confirm("Deseja resetar todo o Hardware Hub?")) {
-           localStorage.removeItem('marcenapp-supreme-v383-persistence');
-           window.location.reload();
-        }
-      },
 
-      exportProject: (id: string) => {
-        const msg = get().messages.find(m => m.id === id);
-        if (msg?.project) {
-          const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(msg.project, null, 2));
-          const downloadAnchorNode = document.createElement('a');
-          downloadAnchorNode.setAttribute("href", dataStr);
-          downloadAnchorNode.setAttribute("download", `projeto_${msg.project.title.replace(/\s+/g, '_')}.json`);
-          document.body.appendChild(downloadAnchorNode);
-          downloadAnchorNode.click();
-          downloadAnchorNode.remove();
-        }
+      resetStore: () => {
+        localStorage.removeItem('marcenapp-supreme-v383-persistence');
+        window.location.reload();
       }
     }),
     { name: 'marcenapp-supreme-v383-persistence' }

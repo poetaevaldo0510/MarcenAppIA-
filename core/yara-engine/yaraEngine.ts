@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { Attachment, ProjectData } from '../../types';
+import { Attachment, ProjectData, Module } from '../../types';
 import { IARA_SYSTEM_PROMPT } from '../../constants';
 import { useStore } from "../../store/yaraStore";
 
@@ -11,10 +11,6 @@ export const YaraEngine = {
     return new GoogleGenAI({ apiKey });
   },
 
-  /**
-   * TESTE DE CONEXÃO (PROTOCOLO DE SEGURANÇA)
-   * Verifica se a chave API é válida e possui faturamento ativo.
-   */
   testConnection: async (apiKey?: string): Promise<boolean> => {
     try {
       const key = apiKey || useStore.getState().manualApiKey || process.env.API_KEY;
@@ -32,34 +28,40 @@ export const YaraEngine = {
   },
 
   /**
-   * VALIDAÇÃO MATEMÁTICA RÍGIDA (PROTOCOLO A - BACKEND)
-   * Garante que a IA não invente medidas ou ignore erros de projeto.
+   * PROTOCOLO B: MOTOR DE CORREÇÃO AUTOMÁTICA
+   * Se a geometria falhar, Yara sugere o ajuste técnico.
    */
+  suggestCorrection: (projectData: any): string | null => {
+    const sumModulesW = projectData.modules?.reduce((acc: number, m: any) => acc + (m.dimensions?.w || 0), 0) || 0;
+    const envW = projectData.environment?.width || 0;
+
+    if (sumModulesW > envW && envW > 0) {
+      const diff = sumModulesW - envW;
+      // Busca o maior módulo para sugerir redução
+      const modules = [...(projectData.modules || [])].sort((a, b) => b.dimensions.w - a.dimensions.w);
+      if (modules.length > 0) {
+        const target = modules[0];
+        const newW = target.dimensions.w - diff;
+        return `SUGESTÃO YARA: Reduzir módulo '${target.type}' de ${target.dimensions.w}mm para ${newW}mm para respeitar a largura de ${envW}mm.`;
+      }
+    }
+    return null;
+  },
+
   validateGeometry: (projectData: any): { isValid: boolean, alerts: string[] } => {
     const alerts: string[] = [];
     const sumModulesW = projectData.modules?.reduce((acc: number, m: any) => acc + (m.dimensions?.w || 0), 0) || 0;
     const envW = projectData.environment?.width || 0;
     const envH = projectData.environment?.height || 0;
 
-    // 1. Verificação de Dados Básicos
-    if (!envW || !envH) alerts.push("ERRO: Medidas do ambiente (Largura/Altura) não informadas.");
-    if (!projectData.modules || projectData.modules.length === 0) alerts.push("ERRO: Nenhum módulo identificado no projeto.");
+    if (!envW || !envH) alerts.push("ERRO: Medidas do ambiente não informadas.");
+    if (!projectData.modules || projectData.modules.length === 0) alerts.push("ERRO: Nenhum módulo identificado.");
 
-    // 2. Coerência Matemática (Protocolo de Bloqueio)
     if (envW > 0 && sumModulesW > 0) {
       if (sumModulesW > envW) {
-        alerts.push(`INCONSISTÊNCIA: Soma dos módulos (${sumModulesW}mm) excede largura do ambiente (${envW}mm).`);
-      } else if (Math.abs(sumModulesW - envW) > 1) {
-         // Se for menor, avisar mas permitir se houver fechamentos planejados (opcional)
-         alerts.push(`AVISO: Folga técnica detectada de ${envW - sumModulesW}mm.`);
+        alerts.push(`INCONSISTÊNCIA: Soma (${sumModulesW}mm) > Ambiente (${envW}mm).`);
       }
     }
-
-    // 3. Verificação de Medidas Individuais (Sanidade Industrial)
-    projectData.modules?.forEach((m: any, i: number) => {
-      if (m.dimensions.w < 100) alerts.push(`Módulo ${i+1}: Largura muito baixa (${m.dimensions.w}mm).`);
-      if (m.dimensions.d > 800) alerts.push(`Módulo ${i+1}: Profundidade excessiva (${m.dimensions.d}mm).`);
-    });
 
     return {
       isValid: alerts.filter(a => a.startsWith("ERRO") || a.startsWith("INCONSISTÊNCIA")).length === 0,
@@ -92,8 +94,6 @@ export const YaraEngine = {
 
       const parsed = JSON.parse(response.text || "{}");
       const projectData = parsed.project || parsed;
-      
-      // Validação Matemática de Backend (Protocolo A)
       const validation = YaraEngine.validateGeometry(projectData);
 
       return {
@@ -110,7 +110,6 @@ export const YaraEngine = {
         pricing: { status: 'pending' },
         cutPlan: { status: 'pending' }
       } as ProjectData;
-
     } catch (e: any) {
       throw e;
     }

@@ -1,57 +1,55 @@
-
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.45.0';
 
-// A API KEY é obtida exclusivamente do ambiente seguro do servidor
-const GEMINI_API_KEY = process.env.API_KEY;
+const API_KEY = process.env.API_KEY;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { dna, version, seed_base, style } = body;
+    const { dna, version, seed_base, style, userId, projectId } = body;
 
-    if (!dna || !GEMINI_API_KEY) {
-      return NextResponse.json(
-        { error: "DNA do projeto ou Chave API ausente." },
-        { status: 400 }
-      );
+    if (!API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+      return NextResponse.json({ error: "Configuração de hardware incompleta (Env Vars)." }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-    
-    // 🔒 Lógica de Seed Industrial: Consistência entre versões
-    const finalSeed = (seed_base || 1000) + (version || 1);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
+    // 1. VALIDAÇÃO E CONSUMO DE CRÉDITOS NO BACKEND
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('credits')
+      .eq('id', userId)
+      .single();
+
+    if (userError || (user?.credits || 0) < 5) {
+      return NextResponse.json({ error: "Saldo de créditos insuficiente para renderização industrial." }, { status: 402 });
+    }
+
+    // 2. GERAÇÃO DETERMINÍSTICA (GEMINI 3 PRO)
+    const ai = new GoogleGenAI({ apiKey: API_KEY });
+    const finalSeed = (seed_base || 1000) + (version || 1);
     const modulesSummary = dna.modules?.map((m: any) => 
-      `${m.type.toUpperCase()}: W=${m.dimensions.w}mm, H=${m.dimensions.h}mm, D=${m.dimensions.d}mm. Material=${m.material}.`
+      `${m.type.toUpperCase()}: ${m.dimensions.w}x${m.dimensions.h}x${m.dimensions.d}mm. ${m.material}.`
     ).join("\n");
 
     const prompt = `
       INDUSTRIAL ARCHVIZ PROTOCOL v6.0 [STRICT DNA LOCK].
       SEED_ID: ${finalSeed}
-      
-      Você é YARA INDUSTRIAL. Renderize EXATAMENTE conforme o DNA abaixo.
-      Não altere proporções. Não invente elementos. Não mude o layout.
-      Mantenha frestas técnicas de 3mm entre portas e gavetas.
-      
-      ESTRUTURA:
-      - Ambiente: ${dna.environment.width}x${dna.environment.height}x${dna.environment.depth}mm.
-      - Componentes:
+      Renderize exatamente:
+      Ambiente: ${dna.environment.width}x${dna.environment.height}mm.
+      Módulos:
       ${modulesSummary}
-      
-      CONDIÇÃO DE RENDER:
-      Ultra realista, ArchViz profissional, PBR Textures.
-      Estilo: ${style === 'faithful' ? 'Estúdio técnico, fundo neutro, luz difusa.' : 'Interior de luxo minimalista, iluminação natural de janela.'}
+      Estilo: ${style === 'faithful' ? 'Estúdio técnico, fundo neutro.' : 'Interior de luxo minimalista.'}
     `;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-image-preview',
       contents: { parts: [{ text: prompt }] },
       config: {
-        imageConfig: {
-          aspectRatio: "1:1",
-          imageSize: "1K"
-        },
+        imageConfig: { aspectRatio: "1:1", imageSize: "1K" },
         seed: finalSeed,
         temperature: 0,
       }
@@ -67,19 +65,38 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!base64Image) {
-      return NextResponse.json({ error: "Falha ao gerar imagem." }, { status: 500 });
+    if (!base64Image) throw new Error("Falha no hardware de imagem.");
+
+    // 3. STORAGE NO SUPABASE
+    const fileName = `${projectId}/v${version}_${style}_${Date.now()}.png`;
+    
+    // Fix for: Cannot find name 'Buffer'. Using atob to convert base64 to Uint8Array.
+    const binaryString = atob(base64Image);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
     }
+    
+    const { data: storageData, error: storageError } = await supabase.storage
+      .from('renders')
+      .upload(fileName, bytes, { contentType: 'image/png' });
+
+    if (storageError) throw new Error("Falha ao salvar no storage industrial.");
+
+    const { data: { publicUrl } } = supabase.storage.from('renders').getPublicUrl(fileName);
+
+    // 4. ATUALIZAR DB E DEDUZIR CRÉDITOS
+    await supabase.from('users').update({ credits: user.credits - 5 }).eq('id', userId);
+    await supabase.from('credits_log').insert({ user_id: userId, amount: -5, description: `Render v${version} - ${style}` });
 
     return NextResponse.json({
       success: true,
-      version: version || 1,
-      seed: finalSeed,
-      image: `data:image/png;base64,${base64Image}`
+      url: publicUrl,
+      seed: finalSeed
     });
 
   } catch (error: any) {
-    console.error("Erro no Motor Yara:", error);
-    return NextResponse.json({ error: "Erro interno no hardware de renderização." }, { status: 500 });
+    console.error("API RENDER ERROR:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
