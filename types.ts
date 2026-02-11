@@ -5,45 +5,35 @@ export enum MessageType {
   SYSTEM = 'system'
 }
 
-// Added YaraPlan type used in store
-export type YaraPlan = 'BASIC' | 'PRO' | 'STUDIO' | 'ENTERPRISE';
+export type YaraPlan = 'free' | 'pro' | 'studio' | 'enterprise';
 
-// Added CreditTransaction interface used in store
-export interface CreditTransaction {
+export interface UserProfile {
   id: string;
-  type: 'topup' | 'consumption';
-  amount: number;
-  description: string;
-  timestamp: string;
-}
-
-// Added Attachment interface used in engine
-export interface Attachment {
-  type: 'image' | 'audio';
-  url?: string;
-  data: string;
-}
-
-export interface Module {
-  id: string;
-  type: string;
-  dimensions: { w: number; h: number; d: number };
-  material: string;
-  finish: string;
+  email: string;
+  name: string;
+  plan: YaraPlan;
+  credits: number;
 }
 
 export interface RenderVersion {
   version: number;
   timestamp: string;
+  image_url: string;
   faithfulUrl: string;
   decoratedUrl: string;
+  seed: number;
+  locked: boolean;
 }
 
 export interface ProjectData {
   projectId: string;
+  user_id?: string;
   title: string;
   description: string;
-  complexity: number; // Added complexity property to resolve error in budgetEngine.ts
+  complexity: number;
+  seed_base: number;
+  version_count: number;
+  max_free_versions: number;
   environment: {
     width: number;
     height: number;
@@ -51,6 +41,10 @@ export interface ProjectData {
   };
   modules: Module[];
   status: 'draft' | 'validated' | 'LOCKED' | 'production';
+  dna_locked?: {
+    modules: Module[];
+    environment: any;
+  };
   currentVersion: number;
   renderHistory: RenderVersion[];
   validation: {
@@ -67,6 +61,14 @@ export interface ProjectData {
   };
 }
 
+export interface Module {
+  id: string;
+  type: string;
+  dimensions: { w: number; h: number; d: number };
+  material: string;
+  finish: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -75,6 +77,7 @@ export interface Message {
   text: string;
   timestamp: string;
   src?: string;
+  audio?: string; // Base64 do áudio gerado pela YARA
   project?: ProjectData;
   status: 'sent' | 'processing' | 'done' | 'error' | 'waiting_confirmation';
   progressiveSteps?: {
@@ -83,4 +86,18 @@ export interface Message {
     pricing: 'active' | 'done' | 'error' | false;
     cutPlan: 'active' | 'done' | 'error' | false;
   };
+}
+
+export interface CreditTransaction {
+  id: string;
+  type: 'topup' | 'consumption';
+  amount: number;
+  description: string;
+  timestamp: string;
+}
+
+export interface Attachment {
+  type: 'image' | 'audio';
+  url?: string;
+  data: string;
 }

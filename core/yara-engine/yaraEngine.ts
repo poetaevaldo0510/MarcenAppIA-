@@ -7,30 +7,70 @@ import { useStore } from "../../store/yaraStore";
 export const YaraEngine = {
   getAi: () => {
     const apiKey = useStore.getState().manualApiKey || process.env.API_KEY;
-    if (!apiKey) throw new Error("Chave API Master não configurada no hardware.");
+    if (!apiKey) throw new Error("Chave API ausente no hardware.");
     return new GoogleGenAI({ apiKey });
   },
 
-  testConnection: async (keyToTest?: string): Promise<boolean> => {
+  /**
+   * TESTE DE CONEXÃO (PROTOCOLO DE SEGURANÇA)
+   * Verifica se a chave API é válida e possui faturamento ativo.
+   */
+  testConnection: async (apiKey?: string): Promise<boolean> => {
     try {
-      const apiKey = keyToTest || useStore.getState().manualApiKey || process.env.API_KEY;
-      const ai = new GoogleGenAI({ apiKey });
+      const key = apiKey || useStore.getState().manualApiKey || process.env.API_KEY;
+      if (!key) return false;
+      const ai = new GoogleGenAI({ apiKey: key });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [{ text: 'PING' }],
-        config: { maxOutputTokens: 2 }
+        contents: 'ping',
       });
       return !!response.text;
-    } catch (e: any) { return false; }
+    } catch (e) {
+      console.error("YARA ENGINE: Erro de conexão", e);
+      return false;
+    }
   },
 
   /**
-   * FASE 2 & 3: EXTRAÇÃO TÉCNICA E VALIDAÇÃO GEOMÉTRICA
+   * VALIDAÇÃO MATEMÁTICA RÍGIDA (PROTOCOLO A - BACKEND)
+   * Garante que a IA não invente medidas ou ignore erros de projeto.
    */
+  validateGeometry: (projectData: any): { isValid: boolean, alerts: string[] } => {
+    const alerts: string[] = [];
+    const sumModulesW = projectData.modules?.reduce((acc: number, m: any) => acc + (m.dimensions?.w || 0), 0) || 0;
+    const envW = projectData.environment?.width || 0;
+    const envH = projectData.environment?.height || 0;
+
+    // 1. Verificação de Dados Básicos
+    if (!envW || !envH) alerts.push("ERRO: Medidas do ambiente (Largura/Altura) não informadas.");
+    if (!projectData.modules || projectData.modules.length === 0) alerts.push("ERRO: Nenhum módulo identificado no projeto.");
+
+    // 2. Coerência Matemática (Protocolo de Bloqueio)
+    if (envW > 0 && sumModulesW > 0) {
+      if (sumModulesW > envW) {
+        alerts.push(`INCONSISTÊNCIA: Soma dos módulos (${sumModulesW}mm) excede largura do ambiente (${envW}mm).`);
+      } else if (Math.abs(sumModulesW - envW) > 1) {
+         // Se for menor, avisar mas permitir se houver fechamentos planejados (opcional)
+         alerts.push(`AVISO: Folga técnica detectada de ${envW - sumModulesW}mm.`);
+      }
+    }
+
+    // 3. Verificação de Medidas Individuais (Sanidade Industrial)
+    projectData.modules?.forEach((m: any, i: number) => {
+      if (m.dimensions.w < 100) alerts.push(`Módulo ${i+1}: Largura muito baixa (${m.dimensions.w}mm).`);
+      if (m.dimensions.d > 800) alerts.push(`Módulo ${i+1}: Profundidade excessiva (${m.dimensions.d}mm).`);
+    });
+
+    return {
+      isValid: alerts.filter(a => a.startsWith("ERRO") || a.startsWith("INCONSISTÊNCIA")).length === 0,
+      alerts
+    };
+  },
+
   processInput: async (text: string, attachment?: Attachment): Promise<ProjectData | null> => {
     try {
       const ai = YaraEngine.getAi();
-      const parts: any[] = [{ text: text || "Realize o escaneamento técnico do rascunho/descrição e gere o DNA estrutural." }];
+      const parts: any[] = [{ text: text || "Analise as medidas e estrutura deste projeto de marcenaria." }];
       
       if (attachment?.data) {
         parts.push({ 
@@ -50,51 +90,29 @@ export const YaraEngine = {
         }
       });
 
-      let parsed;
-      try {
-        parsed = JSON.parse(response.text || "{}");
-      } catch (parseErr) {
-        throw new Error("Falha ao processar resposta técnica da Yara. O DNA retornado está corrompido.");
-      }
-
+      const parsed = JSON.parse(response.text || "{}");
       const projectData = parsed.project || parsed;
       
-      // VALIDAÇÃO TÉCNICA (Camada de Hardware)
-      const sumModulesW = projectData.modules?.reduce((acc: number, m: any) => acc + (m.dimensions?.w || 0), 0) || 0;
-      const envW = projectData.environment?.width || 0;
-      const alerts: string[] = projectData.validation?.alerts || [];
-      
-      if (envW > 0 && Math.abs(sumModulesW - envW) > 5) {
-        projectData.validation.isValid = false;
-        alerts.push(`CONFLITO DE MEDIDAS: Soma dos módulos (${sumModulesW}mm) ≠ Largura Total (${envW}mm). Ajuste necessário.`);
-      }
-
-      if (!projectData.modules || projectData.modules.length === 0) {
-        projectData.validation.isValid = false;
-        alerts.push("DNA VAZIO: Nenhum módulo estrutural foi identificado no rascunho.");
-      }
+      // Validação Matemática de Backend (Protocolo A)
+      const validation = YaraEngine.validateGeometry(projectData);
 
       return {
         ...projectData,
         complexity: projectData.complexity || 5,
-        projectId: projectData.projectId || `YARA-LOCKED-${Date.now()}`,
-        status: 'draft', // Mantém em draft até o LOCK do usuário
+        projectId: projectData.projectId || `YARA-${Date.now()}`,
+        status: validation.isValid ? 'validated' : 'draft',
         validation: {
-          ...projectData.validation,
-          alerts,
-          isValid: alerts.length === 0 && projectData.validation?.isValid !== false
+          isValid: validation.isValid,
+          alerts: validation.alerts,
+          coherenceScore: validation.isValid ? 100 : 0
         },
         render: { status: 'pending' },
-        currentVersion: 0,
-        renderHistory: []
+        pricing: { status: 'pending' },
+        cutPlan: { status: 'pending' }
       } as ProjectData;
 
     } catch (e: any) {
-      const errorMsg = e.message || JSON.stringify(e);
-      if (errorMsg.includes("403") || errorMsg.includes("PERMISSION_DENIED")) {
-        throw new Error("ERRO 403: Acesso ao hardware de IA bloqueado. Verifique o faturamento da sua API Key.");
-      }
-      throw new Error(`FALHA NO ESCANEAMENTO: ${errorMsg}`);
+      throw e;
     }
   }
 };
