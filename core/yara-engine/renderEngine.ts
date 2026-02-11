@@ -5,8 +5,8 @@ import { useStore } from "../../store/yaraStore";
 
 export const RenderEngine = {
   /**
-   * RECONSTRUTOR GEOMÉTRICO 8K.
-   * Utiliza o rascunho como âncora de proporção e o motor Pro para renderização.
+   * RECONSTRUTOR DE ALTA FIDELIDADE v3.85.
+   * Utiliza o rascunho como âncora geométrica primária.
    */
   generateRender: async (project: ProjectData, sketchBase64?: string): Promise<{ faithful: string, decorated: string }> => {
     const callModel = async (prompt: string, sketch?: string, modelName: string = 'gemini-3-pro-image-preview') => {
@@ -41,42 +41,42 @@ export const RenderEngine = {
             if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
           }
         }
-        throw new Error("Motor falhou ao processar imagem.");
+        throw new Error("O hardware não retornou dados de imagem.");
       } catch (err: any) {
         const errorMsg = err.message || JSON.stringify(err);
-        // Fallback automático para evitar 403 em ambientes limitados
+        
+        // Fallback automático para Gemini 2.5 Flash se Pro falhar por billing/quota
         if (modelName === 'gemini-3-pro-image-preview' && (errorMsg.includes("403") || errorMsg.includes("PERMISSION_DENIED") || errorMsg.includes("429"))) {
-          console.warn("Recorrendo ao motor Flash por restrição de acesso Pro.");
+          console.warn("Restrição de acesso no motor Pro. Tentando Fallback Flash...");
           return callModel(prompt, sketch, 'gemini-2.5-flash-image');
         }
         throw err;
       }
     };
 
-    const modulesDesc = project.modules?.map(m => `${m.type} (${m.dimensions.w}x${m.dimensions.h}x${m.dimensions.d}mm)`).join(", ");
+    const modulesDesc = project.modules?.map(m => `${m.type} em ${m.material} (${m.dimensions.w}x${m.dimensions.h}x${m.dimensions.d}mm)`).join(", ");
 
     const faithfulPrompt = `
-      TASK: SCIENTIFIC RECONSTRUCTION.
-      REFERENCE: Attached sketch is the ABSOLUTE layout.
-      SUBJECT: Professional furniture rendering of "${project.title}".
+      TECHNICAL 3D RECONSTRUCTION.
+      FIDELITY: Use the attached sketch as the absolute reference for geometry, proportions, and layout. 
+      SUBJECT: Professional furniture prototype of "${project.title}".
       MODULES: ${modulesDesc}.
       STYLE: Clean industrial product photography. 
-      LIGHTING: Balanced studio lighting, white high-key background.
-      DETAIL: Show wood grain textures and metallic hardware precisely as specified. 
-      FIDELITY: Match all proportions from the sketch exactly.
+      LIGHTING: Balanced high-key studio lighting, neutral light-gray seamless background.
+      DETAIL: Sharp focus on joinery, wood grain textures, and specified materials. No decoration.
     `;
 
     const decoratedPrompt = `
-      TASK: ARCHITECTURAL DIGEST INTERIOR PHOTOGRAPHY.
-      SUBJECT: The centerpiece is the furniture from the sketch.
-      ENVIRONMENT: Luxury modern high-end penthouse during sunset.
-      LIGHTING: Diffused side-window sunlight (Golden Hour). Warm soft highlights, long cinematic shadows.
-      COMPOSITION: Straight vertical lines, wide angle, perfect architectural symmetry.
-      ATMOSPHERE: Sophisticated, quiet luxury, extremely detailed wood and stone textures.
-      QUALITY: 8K Photorealistic, shallow depth of field.
+      ARCHITECTURAL DIGEST STYLE INTERIOR.
+      CENTERPIECE: The object from the sketch is the main architectural element.
+      ENVIRONMENT: Integrate the object into a luxury modern minimalist penthouse interior.
+      LIGHTING: Professional "Golden Hour" diffused sunlight coming from a side window. Warm highlights and long, soft cinematic shadows.
+      COMPOSITION: Symmetrical architectural photography, wide angle, straight vertical lines.
+      ATMOSPHERE: Sophisticated, quiet luxury, extremely detailed premium materials (matte wood, brushed metal).
+      QUALITY: 8K Photorealistic, subtle depth of field.
     `;
 
-    // Disparo assíncrono paralelo para não travar a thread de UI
+    // Processamento assíncrono paralelo para performance máxima
     const [faithful, decorated] = await Promise.all([
       callModel(faithfulPrompt, sketchBase64),
       callModel(decoratedPrompt, sketchBase64)
