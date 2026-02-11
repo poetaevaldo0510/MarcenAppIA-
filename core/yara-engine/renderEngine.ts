@@ -1,23 +1,19 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { ProjectData } from '../../types';
+import { useStore } from "../../store/yaraStore";
 
 export const RenderEngine = {
   /**
-   * YaraEngine.generateRender
-   * Motor de materialização visual fotorrealista.
-   * Prioriza a geometria do rascunho e aplica estética Architectural Digest.
+   * RECONSTRUTOR GEOMÉTRICO 8K.
+   * Utiliza o rascunho como âncora de proporção e o motor Pro para renderização.
    */
   generateRender: async (project: ProjectData, sketchBase64?: string): Promise<{ faithful: string, decorated: string }> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const materials = project.modules?.map(m => `${m.material} (${m.finish})`).join(", ") || "MDF Premium";
-    const technicalDescription = project.modules?.map(m => `${m.type} (${m.dimensions.w}x${m.dimensions.h}mm)`).join(", ");
-
-    const callModel = async (prompt: string, sketch?: string) => {
-      const parts: any[] = [];
+    const callModel = async (prompt: string, sketch?: string, modelName: string = 'gemini-3-pro-image-preview') => {
+      const apiKey = useStore.getState().manualApiKey || process.env.API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
       
-      // A imagem de rascunho é injetada como a primeira parte para servir de âncora visual (Image-to-Image)
+      const parts: any[] = [];
       if (sketch) {
         parts.push({
           inlineData: {
@@ -26,12 +22,11 @@ export const RenderEngine = {
           }
         });
       }
-      
       parts.push({ text: prompt });
 
       try {
         const response = await ai.models.generateContent({
-          model: 'gemini-3-pro-image-preview',
+          model: modelName,
           contents: { parts },
           config: {
             imageConfig: {
@@ -43,42 +38,45 @@ export const RenderEngine = {
 
         if (response.candidates?.[0]?.content?.parts) {
           for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-              return `data:image/png;base64,${part.inlineData.data}`;
-            }
+            if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
           }
         }
-        throw new Error("Yara Hardware: Falha ao capturar buffer de imagem.");
-      } catch (err) {
-        console.error("Render Engine Error:", err);
+        throw new Error("Motor falhou ao processar imagem.");
+      } catch (err: any) {
+        const errorMsg = err.message || JSON.stringify(err);
+        // Fallback automático para evitar 403 em ambientes limitados
+        if (modelName === 'gemini-3-pro-image-preview' && (errorMsg.includes("403") || errorMsg.includes("PERMISSION_DENIED") || errorMsg.includes("429"))) {
+          console.warn("Recorrendo ao motor Flash por restrição de acesso Pro.");
+          return callModel(prompt, sketch, 'gemini-2.5-flash-image');
+        }
         throw err;
       }
     };
 
-    // PROMPT 1: Fidelidade Geométrica e de Proporção
+    const modulesDesc = project.modules?.map(m => `${m.type} (${m.dimensions.w}x${m.dimensions.h}x${m.dimensions.d}mm)`).join(", ");
+
     const faithfulPrompt = `
-      ACT AS A MASTER CABINET MAKER AND 3D ARTIST.
-      TASK: PHOTOREALISTIC 3D RECONSTRUCTION.
-      SOURCE: Follow the EXACT perspective, lines, and proportions of the provided sketch. 
-      PROJECT: ${project.title}. 
-      SPECS: ${technicalDescription}. 
-      MATERIALS: ${materials}.
-      LIGHTING: High-key studio setup, clean shadows, neutral background. 
-      GOAL: A technical render that looks exactly like the sketch but in real-life materials.
+      TASK: SCIENTIFIC RECONSTRUCTION.
+      REFERENCE: Attached sketch is the ABSOLUTE layout.
+      SUBJECT: Professional furniture rendering of "${project.title}".
+      MODULES: ${modulesDesc}.
+      STYLE: Clean industrial product photography. 
+      LIGHTING: Balanced studio lighting, white high-key background.
+      DETAIL: Show wood grain textures and metallic hardware precisely as specified. 
+      FIDELITY: Match all proportions from the sketch exactly.
     `;
 
-    // PROMPT 2: Composição AD Style (Architectural Digest)
     const decoratedPrompt = `
-      ACT AS AN ARCHITECTURAL PHOTOGRAPHER FOR ARCHITECTURAL DIGEST.
-      TASK: LUXURY INTERIOR RENDERING.
-      FURNITURE: Use the exact modular design from the sketch.
-      STYLE: Contemporary luxury, high-end finishing.
-      LIGHTING: Architectural Digest signature lighting. Soft global illumination, natural morning sun entering through a side window, warm ambient interior highlights.
-      ENVIRONMENT: A curated modern living space with premium textures (marble, oak flooring).
-      COMPOSITION: Professional wide-angle framing (24mm style), balanced rule of thirds, cinematic depth of field.
+      TASK: ARCHITECTURAL DIGEST INTERIOR PHOTOGRAPHY.
+      SUBJECT: The centerpiece is the furniture from the sketch.
+      ENVIRONMENT: Luxury modern high-end penthouse during sunset.
+      LIGHTING: Diffused side-window sunlight (Golden Hour). Warm soft highlights, long cinematic shadows.
+      COMPOSITION: Straight vertical lines, wide angle, perfect architectural symmetry.
+      ATMOSPHERE: Sophisticated, quiet luxury, extremely detailed wood and stone textures.
+      QUALITY: 8K Photorealistic, shallow depth of field.
     `;
 
-    // Execução assíncrona paralela: Não bloqueia a UI e processa ambos simultaneamente
+    // Disparo assíncrono paralelo para não travar a thread de UI
     const [faithful, decorated] = await Promise.all([
       callModel(faithfulPrompt, sketchBase64),
       callModel(decoratedPrompt, sketchBase64)

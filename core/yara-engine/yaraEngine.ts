@@ -2,9 +2,28 @@
 import { GoogleGenAI } from "@google/genai";
 import { Attachment, ProjectData } from '../../types';
 import { IARA_SYSTEM_PROMPT } from '../../constants';
+import { useStore } from "../../store/yaraStore";
 
 export const YaraEngine = {
-  getAi: () => new GoogleGenAI({ apiKey: process.env.API_KEY }),
+  getAi: (providedKey?: string) => {
+    const apiKey = providedKey || useStore.getState().manualApiKey || process.env.API_KEY;
+    return new GoogleGenAI({ apiKey });
+  },
+
+  testConnection: async (keyToTest?: string): Promise<boolean> => {
+    try {
+      const ai = YaraEngine.getAi(keyToTest);
+      await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ text: 'ping' }],
+        config: { maxOutputTokens: 1 }
+      });
+      return true;
+    } catch (e: any) {
+      console.error("Key test failed:", e);
+      return false;
+    }
+  },
 
   processInput: async (text: string, attachment?: Attachment): Promise<ProjectData | null> => {
     const ai = YaraEngine.getAi();
@@ -26,8 +45,11 @@ export const YaraEngine = {
         pricing: { status: 'pending' },
         cutPlan: { status: 'pending' }
       } as ProjectData;
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      const errorMsg = e.message || JSON.stringify(e);
+      if (errorMsg.includes("403") || errorMsg.includes("PERMISSION_DENIED")) {
+        throw new Error("PERMISSÃO NEGADA: O hardware base não tem autorização para este motor. Selecione uma Chave Master válida.");
+      }
       throw e;
     }
   }
