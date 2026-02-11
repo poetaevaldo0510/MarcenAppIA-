@@ -19,6 +19,16 @@ export interface Module {
   finish: string;
 }
 
+export interface CreditTransaction {
+  id: string;
+  type: 'consumption' | 'topup';
+  amount: number;
+  description: string;
+  timestamp: string;
+}
+
+export type YaraPlan = 'BASIC' | 'PRO' | 'STUDIO' | 'ENTERPRISE';
+
 export interface ProjectData {
   projectId: string;
   source: {
@@ -46,6 +56,8 @@ export interface ProjectData {
     labor: number;
     finalPrice: number;
     creditsUsed: number;
+    // Adicionado chapas ao contrato técnico para persistência e visualização
+    chapas: number;
   };
   cutPlan: {
     status: 'pending' | 'processing' | 'done' | 'error';
@@ -75,4 +87,7 @@ export interface MarcenaState {
   messages: Message[];
   isLoading: boolean;
   isAdminMode: boolean;
+  credits: number;
+  currentPlan: YaraPlan;
+  transactions: CreditTransaction[];
 }

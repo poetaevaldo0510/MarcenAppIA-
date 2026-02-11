@@ -18,7 +18,9 @@ export const PricingEngine = {
       total,
       labor,
       finalPrice: total * rates.markup,
-      chapas: Math.ceil(totalArea / 4.3)
+      chapas: Math.ceil(totalArea / 4.3),
+      // Adicionado creditsUsed para satisfazer o contrato da interface ProjectData
+      creditsUsed: 0
     };
   }
 };

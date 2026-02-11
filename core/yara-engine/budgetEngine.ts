@@ -31,7 +31,9 @@ export const BudgetEngine = {
       total: subtotal,
       labor: laborCost,
       finalPrice: finalPrice,
-      chapas: chapasCount
+      chapas: chapasCount,
+      // Adicionado creditsUsed para satisfazer o contrato da interface ProjectData
+      creditsUsed: 0
     };
   }
 };

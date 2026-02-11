@@ -1,6 +1,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { YaraPlan, CreditTransaction } from "../types";
 
 interface MarcenaState {
   isReady: boolean;
@@ -16,6 +17,11 @@ interface MarcenaState {
   loadingAI: boolean;
   hasKey: boolean;
 
+  // Sistema de Créditos
+  credits: number;
+  currentPlan: YaraPlan;
+  transactions: CreditTransaction[];
+
   setReady: (val: boolean) => void;
   setAdmin: (val: boolean) => void;
   setModal: (id: string | null) => void;
@@ -29,11 +35,16 @@ interface MarcenaState {
   updateAmbientes: (ambientes: any) => void;
   setActiveAmbiente: (name: string) => void;
   setHasKey: (val: boolean) => void;
+
+  // Ações de Créditos
+  consumeCredits: (amount: number, description: string) => boolean;
+  addCredits: (amount: number, description: string) => void;
+  changePlan: (plan: YaraPlan) => void;
 }
 
 export const useStore = create<MarcenaState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       isReady: false,
       isAdminLoggedIn: false,
       activeModal: null,
@@ -51,6 +62,17 @@ export const useStore = create<MarcenaState>()(
       selectedImage: null,
       loadingAI: false,
       hasKey: false,
+
+      // Início com créditos de boas-vindas
+      credits: 50,
+      currentPlan: 'BASIC',
+      transactions: [{
+        id: 'welcome',
+        type: 'topup',
+        amount: 50,
+        description: 'Créditos de Boas-vindas Hub',
+        timestamp: new Date().toISOString()
+      }],
 
       setReady: (val) => set({ isReady: val }),
       setAdmin: (val) => set({ isAdminLoggedIn: val }),
@@ -70,6 +92,41 @@ export const useStore = create<MarcenaState>()(
       updateAmbientes: (ambientes) => set({ ambientes }),
       setActiveAmbiente: (activeAmbiente) => set({ activeAmbiente }),
       setHasKey: (val) => set({ hasKey: val }),
+
+      consumeCredits: (amount, description) => {
+        const current = get().credits;
+        if (current < amount) return false;
+        
+        const newTransaction: CreditTransaction = {
+          id: `tx-${Date.now()}`,
+          type: 'consumption',
+          amount,
+          description,
+          timestamp: new Date().toISOString()
+        };
+
+        set((state) => ({
+          credits: state.credits - amount,
+          transactions: [newTransaction, ...state.transactions]
+        }));
+        return true;
+      },
+
+      addCredits: (amount, description) => {
+        const newTransaction: CreditTransaction = {
+          id: `tx-${Date.now()}`,
+          type: 'topup',
+          amount,
+          description,
+          timestamp: new Date().toISOString()
+        };
+        set((state) => ({
+          credits: state.credits + amount,
+          transactions: [newTransaction, ...state.transactions]
+        }));
+      },
+
+      changePlan: (plan) => set({ currentPlan: plan }),
     }),
     { name: 'marcenapp-supreme-v383-persistence' }
   )
