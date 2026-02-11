@@ -1,20 +1,47 @@
 
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI, Modality, Type } from '@google/genai';
 import { YaraEngine } from '../core/yara-engine/yaraEngine';
 import { BudgetEngine } from '../core/yara-engine/budgetEngine';
 import { CutPlanEngine } from '../core/yara-engine/cutPlanEngine';
 import { useStore } from '../store/yaraStore';
-import { supabase } from '../lib/supabase';
 import { ProjectData, RenderVersion } from '../types';
+import { IARA_SYSTEM_PROMPT } from '../constants';
+
+async function playPcmAudio(base64Data: string) {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    const dataInt16 = new Int16Array(bytes.buffer);
+    const buffer = audioContext.createBuffer(1, dataInt16.length, 24000);
+    const channelData = buffer.getChannelData(0);
+    for (let i = 0; i < dataInt16.length; i++) {
+      channelData[i] = dataInt16[i] / 32768.0;
+    }
+
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start();
+  } catch (e) {
+    console.error("Erro ao reproduzir áudio PCM:", e);
+  }
+}
 
 export const ChatFlowService = {
-  /**
-   * VOICE PIPELINE - Execução direta no cliente para evitar erros de rota de API.
-   */
   async executeVoicePipeline(audioBase64: string) {
     const store = useStore.getState();
-    const apiKey = store.manualApiKey || process.env.API_KEY;
+    const apiKey = process.env.API_KEY;
     
+    if (!apiKey) {
+      store.addMessage({ from: 'iara', text: "ERRO: Chave Master necessária para hardware de voz.", status: 'error' });
+      return;
+    }
+
     const iaraId = store.addMessage({
       from: 'iara',
       type: 'typing',
@@ -23,34 +50,27 @@ export const ChatFlowService = {
     });
 
     try {
-      if (!apiKey) throw new Error("Chave API ausente no hardware.");
       const ai = new GoogleGenAI({ apiKey });
-
-      // 1. Transcrição e Extração via Gemini
+      
       const transcriptionResponse = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: {
           parts: [
             { inlineData: { mimeType: 'audio/webm;codecs=opus', data: audioBase64 } },
-            { text: "Extraia apenas os dados estruturais (medidas e módulos) deste comando de marcenaria. Seja conciso." }
+            { text: "Você é um transcritor industrial de marcenaria. Extraia as medidas (em mm) e os módulos mencionados. Retorne apenas a transcrição limpa." }
           ]
         }
       });
-      const transcript = transcriptionResponse.text || "comando não identificado";
+      const transcript = transcriptionResponse.text || "Comando vocal não interpretado.";
 
-      // 2. Geração de Resposta Vocal (TTS)
       const ttsResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ 
-          parts: [{ 
-            text: `DNA Estrutural capturado para ${transcript}. Validando geometria para travamento industrial. Deseja prosseguir com o LOCK?` 
-          }] 
-        }],
+        contents: [{ parts: [{ text: `DNA Estrutural capturado para: ${transcript}. Validando geometria para travamento industrial. Deseja prosseguir com o LOCK?` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' }, 
+              prebuiltVoiceConfig: { voiceName: 'Kore' },
             },
           },
         },
@@ -58,18 +78,23 @@ export const ChatFlowService = {
 
       const audioData = ttsResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (audioData) {
-        const audio = new Audio(`data:audio/mp3;base64,${audioData}`);
-        audio.play().catch(console.error);
+        await playPcmAudio(audioData);
       }
 
       await this.executeMaterialization(transcript, null, iaraId);
     } catch (e: any) {
-      store.updateMessage(iaraId, { text: `ERRO DE VOZ: ${e.message}`, status: 'error' });
+      console.error("Voice Pipeline Error:", e);
+      const errorMsg = e.message?.toLowerCase().includes("failed to fetch")
+        ? "Erro de Conexão: Hardware de Voz inacessível."
+        : `Erro Industrial: ${e.message}`;
+      store.updateMessage(iaraId, { text: errorMsg, status: 'error' });
+      store.setLoadingAI(false);
     }
   },
 
   async executeMaterialization(text: string, image: string | null, existingId?: string) {
     const store = useStore.getState();
+    const apiKey = process.env.API_KEY;
     const iaraId = existingId || store.addMessage({
       from: 'iara',
       type: 'typing',
@@ -78,22 +103,63 @@ export const ChatFlowService = {
     });
 
     try {
-      const project = await YaraEngine.processInput(text, image ? { type: 'image', url: image, data: image.split(',')[1] } : undefined);
-      if (!project) throw new Error("DNA não extraído.");
+      const ai = new GoogleGenAI({ apiKey });
+      
+      // 1. EXTRAÇÃO DE DNA VIA GEMINI 3 FLASH
+      const parts: any[] = [{ text: text || "Analise as medidas e estrutura deste projeto de marcenaria." }];
+      if (image) {
+        parts.push({ 
+          inlineData: { 
+            mimeType: 'image/jpeg', 
+            data: image.split(',')[1] 
+          } 
+        });
+      }
 
-      const correction = YaraEngine.suggestCorrection(project);
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: { parts },
+        config: { 
+          systemInstruction: IARA_SYSTEM_PROMPT, 
+          responseMimeType: "application/json" 
+        }
+      });
+
+      const parsed = JSON.parse(response.text || "{}");
+      const projectData = parsed.project || parsed;
+      const validation = YaraEngine.validateGeometry(projectData);
+      
+      // 2. AUDITORIA ESTRATÉGICA (COPILOTO)
+      const auditResponse = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: `Audite este DNA de marcenaria para viabilidade técnica e sugira melhorias de design industrial: ${JSON.stringify(projectData)}`,
+        config: {
+          systemInstruction: "Você é um auditor sênior de marcenaria industrial. Analise folgas, travamentos e ergonomia."
+        }
+      });
+      const auditReport = auditResponse.text || "Auditoria concluída.";
 
       const enrichedProject: ProjectData = {
-        ...project,
+        ...projectData,
+        projectId: projectData.projectId || `YARA-${Date.now()}`,
+        complexity: projectData.complexity || 5,
         seed_base: Math.floor(Math.random() * 900000) + 100000,
         version_count: 0,
         currentVersion: 0,
-        renderHistory: []
+        renderHistory: [],
+        status: validation.isValid ? 'validated' : 'draft',
+        validation: {
+          isValid: validation.isValid,
+          alerts: validation.alerts,
+          coherenceScore: validation.isValid ? 100 : 0
+        },
+        render: { status: 'pending' }
       };
 
-      let responseText = project.validation?.isValid 
-        ? `DNA Validado. Estrutura industrial de ${project.environment.width}mm verificada. Deseja TRAVAR O LOCK para materialização?`
-        : `BLOQUEIO TÉCNICO: ${project.validation?.alerts[0]}`;
+      const correction = YaraEngine.suggestCorrection(enrichedProject);
+      let responseText = enrichedProject.validation?.isValid 
+        ? `DNA Validado. Estrutura industrial de ${enrichedProject.environment.width}mm verificada com ${enrichedProject.modules.length} módulos.\n\nAUDITORIA: ${auditReport}\n\nDeseja TRAVAR O LOCK para materialização?`
+        : `BLOQUEIO TÉCNICO: ${enrichedProject.validation?.alerts.join(', ')}`;
 
       if (correction) {
         responseText += `\n\n${correction}`;
@@ -102,97 +168,82 @@ export const ChatFlowService = {
       store.updateMessage(iaraId, {
         text: responseText,
         project: enrichedProject,
-        status: project.validation?.isValid ? 'waiting_confirmation' : 'sent',
+        status: enrichedProject.validation?.isValid ? 'waiting_confirmation' : 'sent',
       });
     } catch (e: any) {
-      store.updateMessage(iaraId, { text: `FALHA: ${e.message}`, status: 'error' });
+      console.error("Materialization Error:", e);
+      const errorMsg = e.message?.toLowerCase().includes("failed to fetch")
+        ? "Erro de Rede: O motor de Geometria Yara falhou ao conectar com o hub central."
+        : `FALHA NO ESCANEAMENTO: ${e.message}`;
+      store.updateMessage(iaraId, { text: errorMsg, status: 'error' });
     } finally {
       store.setLoadingAI(false);
     }
   },
 
-  /**
-   * CONFIRMAÇÃO E PRODUÇÃO - Agora executado diretamente no cliente
-   */
   async confirmAndProduce(messageId: string) {
     const store = useStore.getState();
-    const msg = store.messages.find(m => m.id === messageId);
-    if (!msg || !msg.project || !store.user) return;
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return;
 
-    store.updateMessage(messageId, { status: 'processing', text: 'DNA LOCK ATIVADO. Materializando hardware...' });
+    const msg = store.messages.find(m => m.id === messageId);
+    if (!msg || !msg.project) return;
+
+    store.updateMessage(messageId, { 
+      status: 'processing', 
+      text: 'DNA LOCK ATIVADO. Materializando hardware e gerando custos...',
+      progressiveSteps: { parsed: 'done', render: 'active', pricing: 'active', cutPlan: 'active' }
+    });
 
     try {
       const project = msg.project;
-      const apiKey = store.manualApiKey || process.env.API_KEY;
-      if (!apiKey) throw new Error("Hardware sem chave API.");
-
-      // 1. Registrar Projeto no Supabase
-      const { data: dbProject, error: dbError } = await supabase
-        .from('projects')
-        .insert({
-          user_id: store.user.id,
-          title: project.title,
-          dna_locked: project,
-          status: 'LOCKED'
-        })
-        .select()
-        .single();
-
-      if (dbError) console.warn("Aviso: Supabase DB indisponível ou erro no insert.", dbError);
-
-      // 2. Geração de Render Local
       const ai = new GoogleGenAI({ apiKey });
       const finalSeed = project.seed_base + 1;
       const modulesSummary = project.modules?.map((m: any) => 
         `${m.type.toUpperCase()}: ${m.dimensions.w}x${m.dimensions.h}x${m.dimensions.d}mm. ${m.material}.`
       ).join("\n");
 
-      const prompt = `INDUSTRIAL ARCHVIZ PROTOCOL v6.0 [STRICT DNA LOCK]. SEED_ID: ${finalSeed} Renderize: ${modulesSummary}`;
-      
-      const renderRes = await ai.models.generateContent({
+      // RENDERIZAÇÃO 1:1 (FAITHFUL)
+      const renderPrompt = `INDUSTRIAL ARCHVIZ PROTOCOL v6.0 [STRICT DNA LOCK]. SEED_ID: ${finalSeed}. Renderize exatamente: Ambiente ${project.environment.width}x${project.environment.height}mm com módulos: ${modulesSummary}. Estúdio técnico de marcenaria, iluminação suave, foco na precisão milimétrica.`;
+
+      const renderResponse = await ai.models.generateContent({
         model: 'gemini-3-pro-image-preview',
-        contents: { parts: [{ text: prompt }] },
-        config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" }, seed: finalSeed, temperature: 0 }
+        contents: { parts: [{ text: renderPrompt }] },
+        config: {
+          imageConfig: { aspectRatio: "1:1", imageSize: "1K" },
+          seed: finalSeed,
+          temperature: 0,
+        }
       });
 
       let base64Image = "";
-      if (renderRes.candidates?.[0]?.content?.parts) {
-        for (const part of renderRes.candidates[0].content.parts) {
-          if (part.inlineData) { base64Image = part.inlineData.data; break; }
+      if (renderResponse.candidates?.[0]?.content?.parts) {
+        for (const part of renderResponse.candidates[0].content.parts) {
+          if (part.inlineData) {
+            base64Image = `data:image/png;base64,${part.inlineData.data}`;
+            break;
+          }
         }
       }
-      if (!base64Image) throw new Error("Falha no hardware de imagem.");
 
-      // 3. Simular/Tentar Upload no Storage (Supabase)
-      const publicUrl = `data:image/png;base64,${base64Image}`;
-      const fileName = `${dbProject?.id || 'temp'}/v1_faithful_${Date.now()}.png`;
-      
-      try {
-        const binaryString = atob(base64Image);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
-        await supabase.storage.from('renders').upload(fileName, bytes, { contentType: 'image/png' });
-      } catch (stErr) {
-        console.warn("Storage skip ou indisponível.");
-      }
+      if (!base64Image) throw new Error("Hardware de renderização retornou vazio.");
 
-      // 4. Cálculos e Enriquecimento
       const pricing = BudgetEngine.calculate(project, store.industrialRates);
       const cutPlan = CutPlanEngine.optimize(project);
 
       const v1: RenderVersion = {
         version: 1,
         timestamp: new Date().toISOString(),
-        image_url: publicUrl,
-        faithfulUrl: publicUrl,
-        decoratedUrl: publicUrl,
+        image_url: base64Image,
+        faithfulUrl: base64Image,
+        decoratedUrl: base64Image,
         seed: finalSeed,
         locked: true
       };
 
       const updatedProject: ProjectData = {
         ...project,
-        projectId: dbProject?.id || project.projectId,
+        projectId: `P-${Date.now()}`,
         status: 'LOCKED',
         currentVersion: 1,
         renderHistory: [v1],
@@ -202,55 +253,70 @@ export const ChatFlowService = {
       };
 
       store.updateMessage(messageId, {
-        text: "DNA BLOQUEADO. Hardware v1 materializado.",
+        text: "DNA BLOQUEADO COM SUCESSO. Hardware materializado com plano de corte e orçamento industrial pronto.",
         project: updatedProject,
-        status: 'done'
+        status: 'done',
+        progressiveSteps: { parsed: 'done', render: 'done', pricing: 'done', cutPlan: 'done' }
       });
       
-      await store.consumeCredits(10, `DNA LOCK: ${project.title}`);
-      await store.syncUserFromDB();
+      await store.consumeCredits(10, `PROJETO: ${project.title}`);
     } catch (e: any) {
-      store.updateMessage(messageId, { text: `ERRO INDUSTRIAL: ${e.message}`, status: 'error' });
+      console.error("Confirm/Produce Error:", e);
+      const errorMsg = e.message?.toLowerCase().includes("failed to fetch")
+        ? "Erro de Conexão: O servidor de renderização industrial não respondeu."
+        : `ERRO INDUSTRIAL: ${e.message}`;
+      store.updateMessage(messageId, { text: errorMsg, status: 'error' });
+    } finally {
+      store.setLoadingAI(false);
     }
   },
 
   async reRenderLocked(messageId: string) {
     const store = useStore.getState();
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return;
+
     const msg = store.messages.find(m => m.id === messageId);
-    if (!msg || !msg.project || !store.user) return;
+    if (!msg || !msg.project) return;
 
     const project = msg.project;
     const nextVersion = (project.currentVersion || 1) + 1;
-    const apiKey = store.manualApiKey || process.env.API_KEY;
 
     try {
-      if (!apiKey) throw new Error("Hardware sem chave API.");
-      store.updateMessage(messageId, { status: 'processing', text: `Executando ajuste v${nextVersion}...` });
+      store.updateMessage(messageId, { status: 'processing', text: `Recalibrando renderização v${nextVersion}...` });
 
       const ai = new GoogleGenAI({ apiKey });
       const finalSeed = project.seed_base + nextVersion;
-      const prompt = `INDUSTRIAL ARCHVIZ PROTOCOL v6.0 [STRICT DNA LOCK]. SEED_ID: ${finalSeed} AJUSTE VERSÃO ${nextVersion}`;
-      
-      const renderRes = await ai.models.generateContent({
+      const prompt = `INDUSTRIAL ARCHVIZ PROTOCOL v6.0 [STRICT DNA LOCK]. SEED_ID: ${finalSeed}. AJUSTE VERSÃO ${nextVersion} DE MARCENARIA. Foco total em proporções industriais e acabamento premium.`;
+
+      const renderResponse = await ai.models.generateContent({
         model: 'gemini-3-pro-image-preview',
         contents: { parts: [{ text: prompt }] },
-        config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" }, seed: finalSeed, temperature: 0 }
+        config: {
+          imageConfig: { aspectRatio: "1:1", imageSize: "1K" },
+          seed: finalSeed,
+          temperature: 0,
+        }
       });
 
       let base64Image = "";
-      if (renderRes.candidates?.[0]?.content?.parts) {
-        for (const part of renderRes.candidates[0].content.parts) {
-          if (part.inlineData) { base64Image = part.inlineData.data; break; }
+      if (renderResponse.candidates?.[0]?.content?.parts) {
+        for (const part of renderResponse.candidates[0].content.parts) {
+          if (part.inlineData) {
+            base64Image = `data:image/png;base64,${part.inlineData.data}`;
+            break;
+          }
         }
       }
-      const publicUrl = `data:image/png;base64,${base64Image}`;
+
+      if (!base64Image) throw new Error("Falha ao gerar nova versão de imagem.");
 
       const newV: RenderVersion = {
         version: nextVersion,
         timestamp: new Date().toISOString(),
-        image_url: publicUrl,
-        faithfulUrl: publicUrl,
-        decoratedUrl: publicUrl,
+        image_url: base64Image,
+        faithfulUrl: base64Image,
+        decoratedUrl: base64Image,
         seed: finalSeed,
         locked: true
       };
@@ -258,16 +324,18 @@ export const ChatFlowService = {
       const updatedProject: ProjectData = {
         ...project,
         currentVersion: nextVersion,
-        version_count: project.version_count + 1,
-        renderHistory: [...project.renderHistory, newV],
+        version_count: (project.version_count || 0) + 1,
+        renderHistory: [...(project.renderHistory || []), newV],
         render: { status: 'done', faithfulUrl: newV.faithfulUrl, decoratedUrl: newV.decoratedUrl }
       };
 
-      store.updateMessage(messageId, { project: updatedProject, status: 'done' });
-      await store.consumeCredits(5, `Re-Render v${nextVersion}: ${project.title}`);
-      await store.syncUserFromDB();
+      store.updateMessage(messageId, { project: updatedProject, status: 'done', text: `Versão ${nextVersion} materializada.` });
+      await store.consumeCredits(5, `AJUSTE: ${project.title}`);
     } catch (e: any) {
+      console.error("Re-render Error:", e);
       store.updateMessage(messageId, { text: `ERRO DE AJUSTE: ${e.message}`, status: 'error' });
+    } finally {
+      store.setLoadingAI(false);
     }
   }
 };

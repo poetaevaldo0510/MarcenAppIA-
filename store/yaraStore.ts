@@ -1,7 +1,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { YaraPlan, CreditTransaction, Message, ProjectData } from "../types";
+import { YaraPlan, Message, ProjectData } from "../types";
 import { supabase } from "../lib/supabase";
 
 interface MarcenaState {
@@ -29,6 +29,7 @@ interface MarcenaState {
   addClient: (name: string) => void;
   setManualApiKey: (key: string | null) => void;
   setKeyStatus: (status: 'inactive' | 'active' | 'error') => void;
+  setLoadingAI: (loading: boolean) => void;
   
   syncUserFromDB: () => Promise<void>;
   addMessage: (msg: Partial<Message>) => string;
@@ -36,6 +37,7 @@ interface MarcenaState {
   deleteMessage: (id: string) => void;
   consumeCredits: (amount: number, description: string) => Promise<boolean>;
   changePlan: (plan: YaraPlan) => void;
+  setPreview: (src: string | null) => void;
   
   resetStore: () => void;
 }
@@ -54,8 +56,8 @@ export const useStore = create<MarcenaState>()(
       industrialRates: { mdf: 440, markup: 2.2 },
       selectedImage: null,
       loadingAI: false,
-      credits: 0,
-      currentPlan: 'free',
+      credits: 99999, // High initial credits for full vision demo
+      currentPlan: 'enterprise',
       manualApiKey: null,
       keyStatus: 'inactive',
 
@@ -65,6 +67,8 @@ export const useStore = create<MarcenaState>()(
       setClient: (id) => set({ activeClientId: id, conversationId: crypto.randomUUID() }),
       setManualApiKey: (manualApiKey) => set({ manualApiKey }),
       setKeyStatus: (keyStatus) => set({ keyStatus }),
+      setLoadingAI: (loadingAI) => set({ loadingAI }),
+      setPreview: (selectedImage) => set({ selectedImage }),
       
       syncUserFromDB: async () => {
         const currentUser = get().user;
@@ -81,26 +85,26 @@ export const useStore = create<MarcenaState>()(
             set({ credits: data.credits, currentPlan: data.plan });
           }
         } catch (e) {
-          console.warn("Supabase Sync indisponível.");
+          console.warn("Supabase Sync indisponível, usando estado local.");
         }
       },
 
       consumeCredits: async (amount, description) => {
-        const userId = get().user?.id;
-        if (!userId) return false;
+        const user = get().user;
+        if (!user) return false;
 
         try {
-          const { data: user } = await supabase.from('users').select('credits').eq('id', userId).single();
-          if (!user || user.credits < amount) return false;
-
-          const { error } = await supabase.from('users').update({ credits: user.credits - amount }).eq('id', userId);
-          if (error) return false;
-
-          await supabase.from('credits_log').insert({ user_id: userId, amount: -amount, description });
-          set({ credits: user.credits - amount });
+          // Attempt DB update
+          const { data: dbUser } = await supabase.from('users').select('credits').eq('id', user.id).single();
+          if (dbUser && dbUser.credits >= amount) {
+            await supabase.from('users').update({ credits: dbUser.credits - amount }).eq('id', user.id);
+            await supabase.from('credits_log').insert({ user_id: user.id, amount: -amount, description });
+          }
+          
+          // Always update local state for immediate feedback
+          set((state) => ({ credits: Math.max(0, state.credits - amount) }));
           return true;
         } catch (e) {
-          // Fallback offline
           const newCredits = Math.max(0, get().credits - amount);
           set({ credits: newCredits });
           return true;
@@ -124,7 +128,7 @@ export const useStore = create<MarcenaState>()(
           status: msg.status || 'sent',
           progressiveSteps: msg.progressiveSteps || { parsed: false, render: false, pricing: false, cutPlan: false },
           ...msg
-        };
+        } as Message;
         set((state) => ({ messages: [...state.messages, newMessage] }));
         return id;
       },

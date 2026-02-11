@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   X, Mic, ShieldCheck, Plus, Menu, Image as LucideImage, Send, Loader2, Sparkles, 
-  ChevronRight, Scissors, Share2, RotateCcw, Wallet, LogOut, LogIn, Volume2, ShieldAlert,
-  ChevronLeft, CheckCircle, Hammer, Ruler, Package, DollarSign, Settings2, UserPlus
+  Scissors, Wallet, LogOut, LogIn, Key, DollarSign, Settings2, UserPlus, Zap, ExternalLink,
+  Users, Package, Briefcase
 } from "lucide-react";
 import { useStore } from "../store/yaraStore";
 import { ChatFlowService } from "../services/chatFlow";
@@ -20,6 +20,7 @@ export default function Workshop() {
   const [password, setPassword] = useState("123456");
   const [authLoading, setAuthLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [needsKey, setNeedsKey] = useState(false);
   
   const [input, setInput] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -56,28 +57,59 @@ export default function Workshop() {
     e.preventDefault();
     setAuthLoading(true);
     
-    if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) {
-        alert("FALHA NO REGISTRO: " + error.message);
-      } else if (data.user) {
-        // Criar perfil na tabela public.users
-        const isMaster = email === 'evaldo@marcenapp.com.br';
-        const { error: dbError } = await supabase.from('users').upsert({
-          id: data.user.id,
-          email: email,
-          credits: isMaster ? 5000 : 50,
-          plan: isMaster ? 'enterprise' : 'free'
-        });
-        if (dbError) console.error("Erro ao criar perfil:", dbError);
-        alert("CONTA CRIADA COM SUCESSO! Verifique seu e-mail ou faça login.");
-        setIsSignUp(false);
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          alert("FALHA NO REGISTRO: " + error.message);
+        } else if (data.user) {
+          alert("CONTA CRIADA! Por favor, verifique seu e-mail ou faça login.");
+          setIsSignUp(false);
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          alert("ACESSO NEGADO: " + error.message);
+        }
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert("ACESSO NEGADO: " + error.message);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAuthLoading(false);
     }
-    setAuthLoading(false);
+  };
+
+  const handleDemoAccess = async () => {
+    const aiStudio = (window as any).aistudio;
+    if (!aiStudio) {
+      proceedWithDemo();
+      return;
+    }
+    const hasKey = await aiStudio.hasSelectedApiKey();
+    if (!hasKey) {
+      setNeedsKey(true);
+      return;
+    }
+    proceedWithDemo();
+  };
+
+  const proceedWithDemo = () => {
+    const demoUser = {
+      id: 'demo-master-id',
+      email: 'evaldo@marcenapp.com.br',
+      user_metadata: { full_name: 'Evaldo Master' }
+    };
+    store.setUser(demoUser);
+    useStore.setState({ credits: 99999, currentPlan: 'enterprise' });
+    setNeedsKey(false);
+  };
+
+  const handleOpenKeyPicker = async () => {
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio) {
+      await aiStudio.openSelectKey();
+    }
+    proceedWithDemo();
   };
 
   const handleSignOut = async () => {
@@ -121,49 +153,97 @@ export default function Workshop() {
   };
 
   const activeProject = useMemo(() => store.messages.slice().reverse().find(m => m.project)?.project, [store.messages]);
-  const financeiroTotal = useMemo(() => activeProject?.pricing || { finalPrice: 0, profit: 0, margin: 0 }, [activeProject]);
 
   if (!store.user) return (
     <div className="h-screen bg-[#09090b] flex items-center justify-center p-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#D9770608_0%,_transparent_70%)]" />
       <div className="w-full max-w-md bg-white rounded-[3rem] p-10 sm:p-12 space-y-10 shadow-2xl relative z-10 animate-in zoom-in-95 duration-700">
-        <div className="flex flex-col items-center gap-6">
-          <LogoSVG size={100} />
-          <div className="text-center">
-            <h1 className="text-2xl font-black uppercase tracking-tighter text-zinc-900">MARCENAPP HUB</h1>
-            <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em] mt-2">Engenharia Digital v6.0</p>
+        
+        {needsKey ? (
+          <div className="space-y-8 text-center py-4">
+            <div className="bg-amber-100 p-6 rounded-3xl inline-flex mb-4">
+              <Key size={48} className="text-amber-600" />
+            </div>
+            <h2 className="text-2xl font-black uppercase text-zinc-900 leading-tight">Chave API Necessária</h2>
+            <p className="text-zinc-500 text-sm leading-relaxed">
+              Para utilizar os modelos de alta fidelidade (Gemini 3 Pro) no MarcenApp, você deve selecionar uma chave de um projeto com faturamento ativo.
+            </p>
+            <div className="bg-zinc-50 p-6 rounded-3xl border border-zinc-100 text-left space-y-3">
+              <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">Documentação Obrigatória</p>
+              <a 
+                href="https://ai.google.dev/gemini-api/docs/billing" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-amber-600 text-xs font-bold hover:underline"
+              >
+                Gerenciar Faturamento Gemini <ExternalLink size={14}/>
+              </a>
+            </div>
+            <button 
+              onClick={handleOpenKeyPicker}
+              className="w-full py-6 bg-amber-600 text-black rounded-[2rem] font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all shadow-xl shadow-amber-200"
+            >
+              <Zap size={24} className="fill-current" />
+              Selecionar Chave Paga
+            </button>
+            <button 
+              onClick={() => setNeedsKey(false)}
+              className="text-[11px] font-black uppercase text-zinc-400"
+            >
+              Voltar ao Início
+            </button>
           </div>
-        </div>
-        <form onSubmit={handleAuth} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-zinc-400 ml-4">E-mail Corporativo</label>
-            <input 
-              type="email" placeholder="nome@empresa.com" 
-              className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
-              value={email} onChange={e => setEmail(e.target.value)} required
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[9px] font-black uppercase text-zinc-400 ml-4">Chave Mestra</label>
-            <input 
-              type="password" placeholder="••••••" 
-              className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
-              value={password} onChange={e => setPassword(e.target.value)} required
-            />
-          </div>
-          <button disabled={authLoading} className="w-full py-6 bg-zinc-900 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all disabled:opacity-50 shadow-xl shadow-zinc-200">
-            {authLoading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? <UserPlus size={24} /> : <LogIn size={24} />)} 
-            {isSignUp ? "Cadastrar no Hub" : "Acessar Workshop"}
-          </button>
-        </form>
-        <div className="text-center pt-2">
-          <button 
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-[11px] font-black uppercase text-amber-600 hover:text-amber-700 transition-colors"
-          >
-            {isSignUp ? "Já tenho acesso • Fazer Login" : "Não tenho conta • Cadastrar agora"}
-          </button>
-        </div>
+        ) : (
+          <>
+            <div className="flex flex-col items-center gap-6">
+              <LogoSVG size={100} />
+              <div className="text-center">
+                <h1 className="text-2xl font-black uppercase tracking-tighter text-zinc-900">MARCENAPP HUB</h1>
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em] mt-2">Engenharia Digital v6.0</p>
+              </div>
+            </div>
+            <form onSubmit={handleAuth} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-zinc-400 ml-4">E-mail Corporativo</label>
+                <input 
+                  type="email" placeholder="nome@empresa.com" 
+                  className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
+                  value={email} onChange={e => setEmail(e.target.value)} required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase text-zinc-400 ml-4">Chave Mestra</label>
+                <input 
+                  type="password" placeholder="••••••" 
+                  className="w-full p-6 bg-zinc-100 rounded-3xl outline-none font-bold text-zinc-900 border border-transparent focus:border-amber-500/30 transition-all" 
+                  value={password} onChange={e => setPassword(e.target.value)} required
+                />
+              </div>
+              <button disabled={authLoading} className="w-full py-6 bg-zinc-900 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all disabled:opacity-50 shadow-xl shadow-zinc-200">
+                {authLoading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? <UserPlus size={24} /> : <LogIn size={24} />)} 
+                {isSignUp ? "Cadastrar no Hub" : "Acessar Workshop"}
+              </button>
+            </form>
+
+            <div className="space-y-6 pt-2">
+              <div className="flex flex-col items-center gap-4">
+                <button 
+                  onClick={handleDemoAccess}
+                  className="w-full py-5 border-2 border-amber-500/30 text-amber-600 rounded-[2rem] font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-3 hover:bg-amber-50 transition-all active:scale-95"
+                >
+                  <Zap size={20} className="fill-amber-600" />
+                  Liberar Acesso Workshop
+                </button>
+                <button 
+                  onClick={() => setIsSignUp(!isSignUp)}
+                  className="text-[11px] font-black uppercase text-zinc-400 hover:text-amber-600 transition-colors"
+                >
+                  {isSignUp ? "Já tenho acesso • Fazer Login" : "Não tenho conta • Cadastrar agora"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -173,20 +253,41 @@ export default function Workshop() {
       <nav className={`fixed inset-y-0 left-0 z-[90000] w-80 bg-[#09090b] transition-transform duration-500 border-r border-white/5 ${sidebar ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static`}>
         <div className="p-8 h-full flex flex-col text-white">
           <div className="flex justify-between items-center mb-10"><LogoSVG size={44} /><button onClick={() => setSidebar(false)} className="lg:hidden text-zinc-500"><X /></button></div>
-          <div className="bg-zinc-900/50 border border-white/5 p-7 rounded-[2.5rem] mb-10 space-y-3">
+          
+          <div className="bg-zinc-900/50 border border-white/5 p-7 rounded-[2.5rem] mb-10 space-y-3 shrink-0">
             <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">SALDO DO HUB</span>
-            <h4 className="text-3xl font-black italic text-amber-500">{store.credits} <span className="text-[10px] not-italic opacity-40">CR</span></h4>
+            <h4 className="text-3xl font-black italic text-amber-500">{store.credits === 99999 ? '∞' : store.credits} <span className="text-[10px] not-italic opacity-40">CR</span></h4>
           </div>
-          <div className="flex-1 overflow-y-auto no-scrollbar space-y-2">
-            <h3 className="text-[10px] font-black uppercase text-zinc-600 tracking-widest mb-6 ml-2">Carteira de Leads</h3>
-            {store.clients.map(c => (
-              <button key={c.id} onClick={() => { store.setClient(c.id); setSidebar(false); }} className={`w-full text-left p-5 rounded-[1.8rem] border transition-all flex items-center gap-4 ${store.activeClientId === c.id ? "bg-amber-600 border-amber-600 text-white shadow-xl" : "bg-zinc-900/40 border-white/5 text-zinc-500 opacity-70"}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black ${store.activeClientId === c.id ? "bg-white text-amber-600" : "bg-zinc-800"}`}>DNA</div>
-                <p className="font-black text-[11px] uppercase truncate tracking-tight">{c.name}</p>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar space-y-8">
+            <div className="space-y-2">
+              <h3 className="text-[10px] font-black uppercase text-zinc-600 tracking-[0.3em] mb-4 ml-2">Navegação</h3>
+              <button className="w-full flex items-center gap-4 p-5 hover:bg-white/5 rounded-2xl transition-all group">
+                <Package size={20} className="text-zinc-500 group-hover:text-amber-500" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Projetos</span>
               </button>
-            ))}
+              <button onClick={() => setSidebar(false)} className="w-full flex items-center gap-4 p-5 bg-white/5 rounded-2xl transition-all group border border-white/5 shadow-lg">
+                <Users size={20} className="text-amber-500" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-white">Clientes</span>
+              </button>
+              <button onClick={() => { store.setModal('ADMIN'); setSidebar(false); }} className="w-full flex items-center gap-4 p-5 hover:bg-white/5 rounded-2xl transition-all group">
+                <Settings2 size={20} className="text-zinc-500 group-hover:text-amber-500" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-white">Configurações</span>
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-[10px] font-black uppercase text-zinc-600 tracking-[0.3em] mb-4 ml-2">Carteira de Leads</h3>
+              {store.clients.map(c => (
+                <button key={c.id} onClick={() => { store.setClient(c.id); setSidebar(false); }} className={`w-full text-left p-5 rounded-[1.8rem] border transition-all flex items-center gap-4 ${store.activeClientId === c.id ? "bg-amber-600 border-amber-600 text-white shadow-xl" : "bg-zinc-900/40 border-white/5 text-zinc-500 opacity-70"}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black ${store.activeClientId === c.id ? "bg-white text-amber-600" : "bg-zinc-800"}`}>DNA</div>
+                  <p className="font-black text-[11px] uppercase truncate tracking-tight">{c.name}</p>
+                </button>
+              ))}
+            </div>
           </div>
-          <button onClick={handleSignOut} className="mt-6 w-full py-5 bg-white/5 border border-white/10 text-zinc-500 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-red-500/10 hover:text-red-500 transition-all"><LogOut size={16} /> Encerrar</button>
+
+          <button onClick={handleSignOut} className="mt-6 w-full py-5 bg-white/5 border border-white/10 text-zinc-500 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-red-500/10 hover:text-red-500 transition-all shrink-0"><LogOut size={16} /> Encerrar</button>
         </div>
       </nav>
 
@@ -199,7 +300,7 @@ export default function Workshop() {
           <div className="flex items-center gap-3">
              <div className="px-5 py-2.5 bg-white/5 rounded-2xl border border-white/10 flex items-center gap-3 cursor-pointer hover:bg-white/10 transition-all" onClick={() => store.setModal('BILLING')}>
                <Wallet size={16} className="text-amber-500" />
-               <span className="text-[11px] font-black italic text-amber-500">{store.credits}</span>
+               <span className="text-[11px] font-black italic text-amber-500">{store.credits === 99999 ? '∞' : store.credits}</span>
              </div>
              <button onClick={() => store.setModal('ADMIN')} className="p-3 bg-white/5 rounded-2xl text-emerald-500 border border-emerald-500/10"><ShieldCheck size={22} /></button>
           </div>
@@ -277,7 +378,7 @@ const BillingContent = () => {
       <div className="p-12 bg-amber-600 rounded-[3.5rem] text-black shadow-2xl relative overflow-hidden">
         <Sparkles size={120} className="absolute -bottom-8 -right-8 opacity-10" />
         <span className="text-[11px] font-black uppercase opacity-60 mb-3 block">Saldo Hub</span>
-        <h3 className="text-6xl font-black italic">{store.credits} <span className="text-xl not-italic opacity-50">UN</span></h3>
+        <h3 className="text-6xl font-black italic">{store.credits === 99999 ? '∞' : store.credits} <span className="text-xl not-italic opacity-50">UN</span></h3>
       </div>
       {['BASIC', 'PRO', 'STUDIO'].map(key => (
         <button key={key} onClick={() => store.changePlan(key as any)} className="w-full p-8 rounded-[2.8rem] border-2 bg-white border-slate-100 flex justify-between items-center hover:border-amber-600 transition-all">
