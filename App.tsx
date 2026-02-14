@@ -48,8 +48,8 @@ export const App: React.FC = () => {
 
   if (!appReady) return (
     <div className="h-[100dvh] w-screen flex flex-col items-center justify-center bg-[#0d1418]">
-       <Loader2 className="text-indigo-500 animate-spin mb-4" size={48} />
-       <p className="text-[10px] font-black uppercase tracking-[0.4em] text-stone-600">Sincronizando Ecossistema...</p>
+       <Loader2 className="text-brand-primary animate-spin mb-4" size={48} />
+       <p className="text-[10px] font-black uppercase tracking-[0.4em] text-stone-600">Iniciando Industrial OS...</p>
     </div>
   );
 
@@ -60,7 +60,6 @@ export const App: React.FC = () => {
 
   const renderModule = () => {
     switch(activeModule) {
-      /* Updated onNavigate props to fix Dispatch type compatibility errors */
       case 'dashboard': return <Dashboard onNavigate={setActiveModule} />;
       case 'ecosystem': return <EcosystemPanel onNavigate={setActiveModule} />;
       case 'studio': return <Studio3D onNavigate={setActiveModule} />;
@@ -70,7 +69,6 @@ export const App: React.FC = () => {
       case 'crm': return <CRMManager />;
       case 'settings': case 'profile': return <Settings />;
       case 'valuation': return <ValuationHub />;
-      /* marketplace is now a valid ModuleType */
       case 'marketplace': return <Marketplace />;
       case 'legal': return <LegalAssistant />;
       case 'production': return activeDNA ? <ProductionManager project={activeDNA} onNavigate={setActiveModule} /> : <Dashboard onNavigate={setActiveModule}/>;
@@ -80,7 +78,6 @@ export const App: React.FC = () => {
       case 'bi': return <BusinessIntelligence />;
       case 'fiscal': return <FiscalManager />;
       case 'fintech': return <FintechHub />;
-      /* distributors is now a valid ModuleType */
       case 'distributors': return <DistributorPortal />;
       case 'services': return <ServiceMarketplace />;
       case 'album': return <ProjectAlbum />;
@@ -96,7 +93,7 @@ export const App: React.FC = () => {
   return (
     <div className="flex flex-col h-[100dvh] bg-[#0d1418] text-[#e9edef] overflow-hidden">
       {!isFullFrame && (
-        <header className="px-6 h-16 shrink-0 flex items-center justify-between border-b border-white/5 z-[70] bg-[#202c33]/80 backdrop-blur-md sticky top-0">
+        <header className="px-6 h-16 shrink-0 flex items-center justify-between border-b border-white/5 z-[70] bg-[#202c33]/80 backdrop-blur-md sticky top-0 pt-safe">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveModule(isAdmin ? 'ecosystem' : 'dashboard')}>
             <Logo size={32} />
             <h1 className="text-base font-black uppercase tracking-tighter">Marcena<span className="text-indigo-400">PP</span></h1>
@@ -113,7 +110,7 @@ export const App: React.FC = () => {
         </header>
       )}
 
-      <main className={`flex-1 relative overflow-y-auto scrollbar-hide ${!isFullFrame ? 'pt-1' : ''}`}>
+      <main className={`flex-1 relative overflow-y-auto custom-scrollbar ${!isFullFrame ? 'pt-1' : ''}`}>
         <div className={isFullFrame ? 'h-full w-full' : 'max-w-7xl mx-auto p-4 pb-32'}>
           {renderModule()}
         </div>

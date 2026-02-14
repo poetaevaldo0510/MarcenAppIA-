@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { 
-  ProjectData, Lead, Transaction, CartItem, MarketplaceItem, Message 
+  ProjectData, Lead, Transaction, CartItem, Message, GlobalSettings 
 } from '../types';
 
 export interface Environment {
@@ -40,10 +40,10 @@ interface ProjectState {
   creditLimit: number;
   distributorLinked: boolean;
   activePaymentSession: any | null;
-  settings: any;
-  transactions: any[];
-  leads: any[];
-  cart: any[];
+  settings: GlobalSettings;
+  transactions: Transaction[];
+  leads: Lead[];
+  cart: CartItem[];
   
   login: (email: string, pass: string) => boolean;
   logout: () => void;
@@ -91,7 +91,15 @@ export const useProjectStore = create<ProjectState>()(
       creditLimit: 15000,
       distributorLinked: false,
       activePaymentSession: null,
-      settings: { mdfWhitePrice: 350, mdfWoodPrice: 550, edgeBandPrice: 5.5, laborDailyRate: 400, workshopOverhead: 15, taxRate: 6, currency: 'BRL' },
+      settings: { 
+        mdfWhitePrice: 350, 
+        mdfWoodPrice: 550, 
+        edgeBandPrice: 5.5, 
+        laborDailyRate: 400, 
+        workshopOverhead: 15, 
+        taxRate: 6, 
+        currency: 'BRL' 
+      },
       transactions: [],
       leads: [],
       cart: [],
@@ -156,6 +164,9 @@ export const useProjectStore = create<ProjectState>()(
         return false;
       },
     }),
-    { name: 'marcenapp-industrial-storage', storage: createJSONStorage(() => localStorage) }
+    { 
+      name: 'marcenapp-industrial-storage', 
+      storage: createJSONStorage(() => localStorage) 
+    }
   )
 );
