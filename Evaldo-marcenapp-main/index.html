@@ -1,0 +1,85 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MarcenaPP - Industrial OS</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#202c33">
+    
+    <!-- Favicon com o logo 'M' do mestre -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 5L92 27V73L50 95L8 73V27L50 5Z' fill='%230d1418' stroke='%234f46e5' stroke-width='6'/><path d='M28 72V28L50 50L72 28V72' stroke='white' stroke-width='12' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <script>
+      // Polyfill crítico para produção Vercel
+      window.process = { 
+        env: { 
+          NODE_ENV: 'production',
+          API_KEY: '' // Será injetado pelo Vite/Vercel
+        } 
+      };
+      
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                primary: '#4f46e5',
+                secondary: '#f59e0b',
+                dark: '#0d1418',
+                surface: '#202c33',
+                panel: '#111b21',
+                wa_user: '#054640',
+                wa_bot: '#202c33'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+        body { 
+          font-family: 'Inter', sans-serif; 
+          background-color: #0d1418; 
+          color: #e9edef; 
+          overflow-x: hidden; 
+          overflow-y: auto;
+          height: auto;
+          min-height: 100dvh;
+          -webkit-font-smoothing: antialiased; 
+        }
+        .wa-bg { background-color: #0d1418; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-blend-mode: overlay; opacity: 0.4; }
+        .bubble-user { border-radius: 12px 0 12px 12px; background: #054640; }
+        .bubble-bot { border-radius: 0 12px 12px 12px; background: #202c33; }
+        html { scroll-behavior: smooth; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0d1418; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.5.0",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@^10.7.7",
+    "zustand": "https://esm.sh/zustand@^5.0.11",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
+    "zustand/": "https://esm.sh/zustand@^5.0.11/"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

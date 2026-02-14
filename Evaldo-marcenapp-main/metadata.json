@@ -1,0 +1,9 @@
+{
+  "name": "MarcenaPP",
+  "description": "Sistema Operacional Industrial para Alta Marcenaria - Design, Produção e Gestão.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

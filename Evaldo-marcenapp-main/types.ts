@@ -1,18 +1,12 @@
 
-export type YaraPlan = 'basic' | 'pro' | 'studio' | 'enterprise';
-
-export interface Attachment {
-  type: 'image';
-  url: string;
-  data: string;
-}
-
-export interface Module {
-  id: string;
-  type: 'balcão' | 'aéreo' | 'torre' | 'painel';
-  dimensions: { w: number; h: number; d: number };
-  material: string;
-  thickness: number;
+export interface GlobalSettings {
+  mdfWhitePrice: number;
+  mdfWoodPrice: number;
+  edgeBandPrice: number;
+  laborDailyRate: number;
+  workshopOverhead: number;
+  taxRate: number;
+  currency: string;
 }
 
 export interface ProjectData {
@@ -28,48 +22,45 @@ export interface ProjectData {
   laborRate: number;
   handleType: string;
   clientName?: string;
-  /* Technical fields added to fix engine and chat flow errors */
+  /* Added technical fields for compatibility */
   projectId?: string;
   title?: string;
   description?: string;
   status?: string;
   complexity?: number;
   environment?: { width: number; height: number; depth: number };
-  modules?: Module[];
-  validation?: {
-    isValid: boolean;
-    alerts: string[];
-    coherenceScore: number;
-  };
-  render?: {
-    status: 'pending' | 'done' | 'error';
-    faithfulUrl?: string;
-    decoratedUrl?: string;
-  };
+  modules?: any[];
+  validation?: any;
+  render?: any;
   pricing?: any;
   cutPlan?: any;
   currentVersion?: number;
   seed_base?: number;
-  dna_locked?: {
-    modules: Module[];
-    environment: { width: number; height: number; depth: number };
-  };
+  dna_locked?: any;
   version_count?: number;
-  renderHistory?: RenderVersion[];
+  renderHistory?: any[];
 }
 
 export type RenderStyle = 'technical' | 'decorated' | 'raw';
 export type PerspectiveAngle = 'frontal' | 'isometric' | 'corner' | 'top';
 
-/* Added RenderVersion to fix chatFlow.ts error */
 export interface RenderVersion {
-  version: number;
-  timestamp: string;
-  image_url?: string;
-  faithfulUrl: string;
-  decoratedUrl: string;
-  seed: number;
-  locked: boolean;
+  id: string;
+  url: string;
+  style: RenderStyle;
+  perspective: PerspectiveAngle;
+  timestamp: number;
+  dna: ProjectData;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface Part {
+  id: number;
+  name: string;
+  w: number;
+  h: number;
+  qtd: number;
+  mat: 'white' | 'wood' | 'back';
 }
 
 export interface Message {
@@ -78,21 +69,18 @@ export interface Message {
   text: string;
   image?: string;
   timestamp: number;
-  /* Added fields for ChatFlowService and MessageBubble */
-  from?: string;
-  type?: string;
-  status?: string;
-  progressiveSteps?: {
-    parsed: 'active' | 'done' | 'error' | false;
-    render: 'active' | 'done' | 'error' | false;
-    pricing: 'active' | 'done' | 'error' | false;
-    cutPlan: 'active' | 'done' | 'error' | false;
-  };
-  project?: ProjectData;
-  src?: string;
-  conversationId?: string;
 }
 
+export interface AppNotification {
+  id: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+  timestamp: number;
+  read: boolean;
+}
+
+// Mapeamento das 20 Fases + Auxiliares
+/* Added marketplace and distributors to fix App.tsx errors */
 export type ModuleType = 
   | 'dashboard' | 'ecosystem' | 'studio' | 'showroom' | 'checkout' 
   | 'budget' | 'legal' | 'fintech' | 'blueprint' | 'cutting' 
@@ -100,13 +88,10 @@ export type ModuleType =
   | 'crm' | 'marketing' | 'bi' | 'valuation' | 'settings' | 'onboarding' | 'profile' | 'album' | 'export'
   | 'marketplace' | 'distributors';
 
-/* Added missing members for useProjectStore.ts */
 export interface Transaction { id: string; type: 'income' | 'expense'; amount: number; description: string; date: number; category: string; }
 export interface Lead { id: string; name: string; phone: string; status: 'new' | 'contacted' | 'negotiating' | 'closed'; projectDna?: ProjectData; estimatedValue: number; }
 export interface MarketplaceItem { id: string; name: string; category: string; price: number; unit: string; supplier: string; image: string; }
 export interface CartItem { product: MarketplaceItem; quantity: number; }
-export interface AppNotification { id: string; type: 'info' | 'success' | 'warning' | 'error'; message: string; timestamp: number; read: boolean; }
-export interface GlobalSettings { mdfWhitePrice: number; mdfWoodPrice: number; edgeBandPrice: number; laborDailyRate: number; workshopOverhead: number; taxRate: number; currency: string; }
 export interface TeamMember { id: string; name: string; role: 'mestre' | 'projetista' | 'montador' | 'vendedor'; status: 'online' | 'in_field' | 'offline'; tasksCompleted: number; avatar: string; activeTaskId?: string; }
 export interface Invoice { id: string; number: string; client_name: string; value: number; tax_value: number; date: number; status: 'pending' | 'authorized' | 'rejected'; ncm_code: string; }
 
